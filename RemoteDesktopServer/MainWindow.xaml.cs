@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using QRCoder;
+using RemoteDesktopServer.Core;
 using RemoteDesktopServer.Network;
 
 namespace RemoteDesktopServer
@@ -44,6 +45,13 @@ namespace RemoteDesktopServer
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            var settings = AppSettings.Load();
+            TxtPort.Text = settings.Port.ToString();
+            SliderFps.Value = settings.Fps;
+            SliderQuality.Value = settings.Quality;
+            if (TxtFpsVal != null) TxtFpsVal.Text = $"{settings.Fps} FPS";
+            if (TxtQualityVal != null) TxtQualityVal.Text = $"{settings.Quality}%";
+
             string localIp = RemoteWebSocketServer.GetLocalIPAddress();
             TxtIpAddress.Text = localIp;
             UpdateQrCode();
@@ -54,6 +62,7 @@ namespace RemoteDesktopServer
         private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
             _isClosing = true;
+            SaveCurrentSettings();
             StopServer();
         }
 
@@ -433,6 +442,7 @@ namespace RemoteDesktopServer
             if (TryGetValidPort(out _))
             {
                 UpdateQrCode();
+                SaveCurrentSettings();
             }
         }
 
@@ -461,6 +471,10 @@ namespace RemoteDesktopServer
             {
                 _server.DefaultFps = (int)SliderFps.Value;
             }
+            if (IsLoaded)
+            {
+                SaveCurrentSettings();
+            }
         }
 
         private void SliderQuality_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -474,6 +488,27 @@ namespace RemoteDesktopServer
             if (_server != null)
             {
                 _server.DefaultQuality = (int)SliderQuality.Value;
+            }
+            if (IsLoaded)
+            {
+                SaveCurrentSettings();
+            }
+        }
+
+        private void SaveCurrentSettings()
+        {
+            try
+            {
+                var settings = new AppSettings
+                {
+                    Port = TryGetValidPort(out int p) ? p : 9090,
+                    Fps = (int)SliderFps.Value,
+                    Quality = (int)SliderQuality.Value
+                };
+                settings.Save();
+            }
+            catch
+            {
             }
         }
 

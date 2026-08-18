@@ -22,6 +22,8 @@ import kotlinx.coroutines.launch
 
 class RemoteViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val prefs = application.getSharedPreferences("remote_desktop_prefs", Context.MODE_PRIVATE)
+
     val wsManager = WebSocketManager(viewModelScope)
     val discoveryManager = LanDiscoveryManager(viewModelScope)
 
@@ -35,22 +37,24 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     private val _currentFrame = MutableStateFlow<Bitmap?>(null)
     val currentFrame: StateFlow<Bitmap?> = _currentFrame.asStateFlow()
 
-    private val _touchMode = MutableStateFlow(TouchMode.TRACKPAD)
+    private val savedTouchModeName = prefs.getString("pref_touch_mode", TouchMode.TRACKPAD.name) ?: TouchMode.TRACKPAD.name
+    private val initialTouchMode = try { TouchMode.valueOf(savedTouchModeName) } catch (e: Exception) { TouchMode.TRACKPAD }
+    private val _touchMode = MutableStateFlow(initialTouchMode)
     val touchMode: StateFlow<TouchMode> = _touchMode.asStateFlow()
 
-    private val _ipAddress = MutableStateFlow("192.168.1.100")
+    private val _ipAddress = MutableStateFlow(prefs.getString("pref_ip", "192.168.1.100") ?: "192.168.1.100")
     val ipAddress: StateFlow<String> = _ipAddress.asStateFlow()
 
-    private val _port = MutableStateFlow("9090")
+    private val _port = MutableStateFlow(prefs.getString("pref_port", "9090") ?: "9090")
     val port: StateFlow<String> = _port.asStateFlow()
 
-    private val _fps = MutableStateFlow(60)
+    private val _fps = MutableStateFlow(prefs.getInt("pref_fps", 60))
     val fps: StateFlow<Int> = _fps.asStateFlow()
 
-    private val _quality = MutableStateFlow(70)
+    private val _quality = MutableStateFlow(prefs.getInt("pref_quality", 70))
     val quality: StateFlow<Int> = _quality.asStateFlow()
 
-    private val _hapticEnabled = MutableStateFlow(true)
+    private val _hapticEnabled = MutableStateFlow(prefs.getBoolean("pref_haptic", true))
     val hapticEnabled: StateFlow<Boolean> = _hapticEnabled.asStateFlow()
 
     private var frameCounter = 0
@@ -74,19 +78,40 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun setIp(ip: String) { _ipAddress.value = ip }
-    fun setPort(p: String) { _port.value = p }
-    fun setTouchMode(mode: TouchMode) { _touchMode.value = mode }
-    fun toggleHaptic(enabled: Boolean) { _hapticEnabled.value = enabled }
+    fun setIp(ip: String) {
+        _ipAddress.value = ip
+        prefs.edit().putString("pref_ip", ip).apply()
+    }
+
+    fun setPort(p: String) {
+        _port.value = p
+        prefs.edit().putString("pref_port", p).apply()
+    }
+
+    fun setTouchMode(mode: TouchMode) {
+        _touchMode.value = mode
+        prefs.edit().putString("pref_touch_mode", mode.name).apply()
+    }
+
+    fun toggleHaptic(enabled: Boolean) {
+        _hapticEnabled.value = enabled
+        prefs.edit().putBoolean("pref_haptic", enabled).apply()
+    }
 
     fun connect() {
-        val url = "ws://${_ipAddress.value.trim()}:${_port.value.trim()}"
+        val ip = _ipAddress.value.trim()
+        val p = _port.value.trim()
+        prefs.edit()
+            .putString("pref_ip", ip)
+            .putString("pref_port", p)
+            .apply()
+        val url = "ws://$ip:$p"
         wsManager.connect(url)
     }
 
     fun connectToDiscovered(serverIp: String, serverPort: Int) {
-        _ipAddress.value = serverIp
-        _port.value = serverPort.toString()
+        setIp(serverIp)
+        setPort(serverPort.toString())
         connect()
     }
 
@@ -136,6 +161,10 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     fun setQualityAndFps(q: Int, f: Int, scale: Double = 1.0) {
         _quality.value = q
         _fps.value = f
+        prefs.edit()
+            .putInt("pref_quality", q)
+            .putInt("pref_fps", f)
+            .apply()
         wsManager.send(ClientMessage(type = "quality_change", quality = q, fps = f, scale = scale))
     }
 
