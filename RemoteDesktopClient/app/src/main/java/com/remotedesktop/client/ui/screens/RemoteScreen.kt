@@ -173,7 +173,10 @@ fun RemoteScreen(
                             var gesturePan = latestPanOffset.value
                             var previousCentroid = Offset.Unspecified
                             var previousDistance = 0f
+                            var transformStartCentroid = Offset.Unspecified
+                            var transformStartDistance = 0f
                             var transformStarted = false
+                            var trackingTwoFingers = false
                             var pointerReleased = false
 
                             val longPressJob = launch {
@@ -198,40 +201,63 @@ fun RemoteScreen(
                                 val activePointers = event.changes.filter { it.pressed }
 
                                 if (activePointers.size >= 2) {
-                                    if (!isMultiTouch) {
+                                    if (!trackingTwoFingers) {
                                         isMultiTouch = true
+                                        trackingTwoFingers = true
                                         longPressJob.cancel()
                                         isDragged = true
-                                        previousCentroid = activePointers.centroid()
-                                        previousDistance = activePointers.distance()
+                                        transformStarted = false
+                                        transformStartCentroid = activePointers.centroid()
+                                        transformStartDistance = activePointers.distance()
+                                        previousCentroid = transformStartCentroid
+                                        previousDistance = transformStartDistance
                                     } else {
                                         val centroid = activePointers.centroid()
                                         val distance = activePointers.distance()
-                                        val centroidDelta = centroid - previousCentroid
-                                        val distanceDelta = abs(distance - previousDistance)
+                                        val viewport = latestViewportSize.value
+                                        val viewportCenter = Offset(viewport.width / 2f, viewport.height / 2f)
+                                        val zoomChange: Float
+                                        val panChange: Offset
+                                        val zoomPivot: Offset
 
-                                        if (!transformStarted &&
-                                            centroidDelta.getDistance() <= touchSlop &&
-                                            distanceDelta <= touchSlop
-                                        ) {
-                                            event.changes.forEach { it.consume() }
-                                            continue
-                                        }
-
-                                        transformStarted = true
-                                        val zoomChange = if (previousDistance > 0f) {
-                                            (distance / previousDistance).coerceIn(0.85f, 1.18f)
+                                        if (!transformStarted) {
+                                            val totalCentroidDelta = centroid - transformStartCentroid
+                                            val totalDistanceDelta = abs(distance - transformStartDistance)
+                                            if (totalCentroidDelta.getDistance() <= touchSlop &&
+                                                totalDistanceDelta <= touchSlop
+                                            ) {
+                                                previousCentroid = centroid
+                                                previousDistance = distance
+                                                event.changes.forEach { it.consume() }
+                                                continue
+                                            }
+                                            transformStarted = true
+                                            zoomChange = if (transformStartDistance > 0f) {
+                                                (distance / transformStartDistance).coerceIn(0.85f, 1.18f)
+                                            } else {
+                                                1f
+                                            }
+                                            panChange = totalCentroidDelta
+                                            zoomPivot = transformStartCentroid
                                         } else {
-                                            1f
+                                            zoomChange = if (previousDistance > 0f) {
+                                                (distance / previousDistance).coerceIn(0.85f, 1.18f)
+                                            } else {
+                                                1f
+                                            }
+                                            panChange = centroid - previousCentroid
+                                            zoomPivot = previousCentroid
                                         }
+
                                         val nextScale = (gestureScale * zoomChange).coerceIn(MIN_ZOOM, MAX_ZOOM)
                                         val scaleRatio = nextScale / gestureScale
-                                        val nextPan = centroid - (centroid - gesturePan) * scaleRatio + centroidDelta
+                                        val nextPan = gesturePan + panChange +
+                                            (zoomPivot - viewportCenter) * (1f - scaleRatio)
                                         gestureScale = nextScale
                                         gesturePan = clampPanOffset(
                                             nextScale,
                                             nextPan,
-                                            latestViewportSize.value
+                                            viewport
                                         )
                                         applyTransform.value(gestureScale, gesturePan)
                                         previousCentroid = centroid
@@ -243,6 +269,10 @@ fun RemoteScreen(
                                 }
 
                                 if (isMultiTouch) {
+                                    trackingTwoFingers = false
+                                    transformStarted = false
+                                    previousCentroid = Offset.Unspecified
+                                    previousDistance = 0f
                                     event.changes.forEach { it.consume() }
                                     if (activePointers.isEmpty()) {
                                         pointerReleased = true
@@ -695,7 +725,7 @@ private class FastStreamSurfaceView(context: Context) : SurfaceView(context), Su
             if (canvas != null) {
                 try {
                     canvas.save()
-                    if (zoomScale > 1f || panOffset != Offset.Zero) {
+                    if (zoomScale != 1f || panOffset != Offset.Zero) {
                         val centerX = width / 2f
                         val centerY = height / 2f
                         canvas.translate(centerX + panOffset.x, centerY + panOffset.y)
