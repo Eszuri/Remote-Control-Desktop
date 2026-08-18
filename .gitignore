@@ -46,6 +46,7 @@ local.properties
 .idea/deploymentTargetSelector.xml
 .idea/deviceManager.xml
 .idea/compiler.xml
+RemoteDesktopClient/.idea/*
 *.iml
 .cxx/
 captures/
