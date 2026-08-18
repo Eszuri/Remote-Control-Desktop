@@ -1,6 +1,6 @@
 # PC Remote Desktop Server (Windows C# .NET 10 WPF)
 
-Aplikasi server native Windows berperforma tinggi (*ultra-low latency*) untuk mengizinkan kendali remote PC penuh dari smartphone Android secara nirkabel melalui jaringan lokal (Wi-Fi) ataupun jarak jauh (WAN/VPN).
+Aplikasi server native Windows berperforma tinggi (*ultra-low latency*) untuk mengizinkan kendali remote PC penuh dari smartphone Android secara nirkabel melalui jaringan lokal (Wi-Fi) ataupun jarak jauh (WAN/VPN) tanpa memerlukan PIN atau konfigurasi rumit.
 
 ---
 
@@ -42,22 +42,24 @@ Aplikasi server native Windows berperforma tinggi (*ultra-low latency*) untuk me
 - **Windows Shortcuts Built-in:**
   - `Win+D` (Show Desktop), `Alt+Tab` (App Switcher), `Ctrl+C`, `Ctrl+V`, `Ctrl+Z`, `Ctrl+A`, `Esc`, `Enter`, `Backspace`, `Tab`, `Space`, dan Tombol Panah Navigasi.
 
-### 3. Jaringan & Keamanan
+### 3. Jaringan & Koneksi Instan (Zero PIN)
 - **Fleck WebSocket Server:**
   - Port default: `9090` (`ws://0.0.0.0:9090`).
   - Binary frame stream teroptimasi: Header paket binary (`0x53` 'S' + Frame Index + Width + Height + JPEG Data).
 - **UDP LAN Auto-Discovery:**
   - Port discovery: `9091`.
   - Menjawab broadcast UDP dari aplikasi Android untuk koneksi instan satu ketukan tanpa repot mengetik IP address.
-- **PIN Authentication & QR Code Pairing:**
-  - Menghasilkan QR Code dinamis berisi metadata koneksi (IP, Port, PIN).
-  - Verifikasi PIN Code 6 digit sebelum klien diizinkan mengirim perintah input kontrol.
+- **Instant QR Code Pairing:**
+  - Menghasilkan QR Code dinamis kontras tinggi berisi metadata koneksi (IP dan Port).
+  - Tidak memerlukan PIN, langsung terkoneksi otomatis saat di-scan.
 
 ### 4. Modern WPF Dashboard UI
-- Tampilan Dark Theme modern.
+- Tampilan Dark Theme modern (`#0B0F19`) dengan palet slate & cyan.
+- Live pulse status badge (Running / Stopped indicator).
+- Tombol **Copy IP** satu-klik.
 - Real-time logging terminal dengan stempel waktu (*timestamp*).
 - Indikator status koneksi & penghitung klien aktif secara *live*.
-- Kontrol slider real-time untuk FPS (10 - 60 FPS) dan JPEG Quality (20% - 95%).
+- Kontrol slider modern untuk FPS (10 - 60 FPS) dan JPEG Quality (20% - 95%).
 
 ---
 
@@ -123,16 +125,13 @@ File `.exe` akan tersedia di:
    - Luncurkan `RemoteDesktopServer.exe`.
    - Disarankan **Run as Administrator** agar server memiliki izin mengontrol jendela elevated (seperti Task Manager, dialog UAC, dan game fullscreen).
 2. **Periksa Informasi Jaringan:**
-   - Server secara otomatis mendeteksi alamat IPv4 lokal Anda (misal: `192.168.1.100`).
+   - Server secara otomatis mendeteksi alamat IPv4 lokal Anda (misal: `192.168.0.103`).
    - Port default: `9090` (WebSocket) dan `9091` (UDP Discovery).
-3. **Atur PIN Keamanan:**
-   - Isi kotak **PIN Code** (misal: `123456`) untuk mencegah akses tanpa izin.
-   - Kosongkan PIN jika ingin mengizinkan koneksi otomatis tanpa autentikasi.
-4. **Hubungkan Smartphone Android:**
+3. **Hubungkan Smartphone Android:**
    - **Metode 1 (Scan QR):** Buka aplikasi Android, pilih **Scan QR**, lalu arahkan kamera HP ke QR code di layar PC.
-   - **Metode 2 (Scan LAN):** Tekan **Scan LAN** pada aplikasi Android untuk mendeteksi server secara otomatis.
-   - **Metode 3 (Manual):** Ketikkan IP Address, Port, dan PIN secara manual.
-5. **Penyesuaian Kualitas Real-time:**
+   - **Metode 2 (Scan LAN):** Tekan **Scan LAN** pada aplikasi Android untuk mendeteksi server secara otomatis, lalu tekan **Connect**.
+   - **Metode 3 (Manual):** Ketikkan IP Address dan Port secara manual, lalu tekan **Connect**.
+4. **Penyesuaian Kualitas Real-time:**
    - **FPS Slider:** Sesuaikan target frame per second (10 - 60 FPS).
    - **Quality Slider:** Sesuaikan tingkat kompresi JPEG (20% - 95%) sesuai bandwidth jaringan Wi-Fi Anda.
 

@@ -1,9 +1,14 @@
 package com.remotedesktop.client.ui.screens
 
+import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Paint
+import android.graphics.Rect
+import android.os.Build
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -24,17 +29,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.remotedesktop.client.data.TouchMode
 import com.remotedesktop.client.ui.theme.*
 import com.remotedesktop.client.viewmodel.RemoteViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @Composable
@@ -42,12 +48,11 @@ fun RemoteScreen(
     viewModel: RemoteViewModel,
     modifier: Modifier = Modifier
 ) {
-    val currentFrame by viewModel.currentFrame.collectAsState()
     val touchMode by viewModel.touchMode.collectAsState()
     val measuredFps by viewModel.measuredFps.collectAsState()
+    val measuredLatency by viewModel.measuredLatency.collectAsState()
     val serverInfo by viewModel.serverInfo.collectAsState()
 
-    // Default: Controls are HIDDEN for a 100% clean fullscreen experience
     var showControls by remember { mutableStateOf(false) }
     var showKeyboardInput by remember { mutableStateOf(false) }
     var keyboardText by remember { mutableStateOf("") }
@@ -58,8 +63,9 @@ fun RemoteScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // Fullscreen Screen Canvas (100% Clean)
-        Box(
+        // Hardware-Accelerated Zero-Latency SurfaceView Screen
+        DirectSurfaceRenderer(
+            viewModel = viewModel,
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(touchMode) {
@@ -100,7 +106,6 @@ fun RemoteScreen(
                     detectDragGestures { change, dragAmount ->
                         change.consume()
                         if (touchMode == TouchMode.TRACKPAD) {
-                            // Sensitivity factor
                             val dx = (dragAmount.x * 1.5f).roundToInt()
                             val dy = (dragAmount.y * 1.5f).roundToInt()
                             viewModel.sendMouseMoveDelta(dx, dy)
@@ -111,30 +116,7 @@ fun RemoteScreen(
                         }
                     }
                 }
-        ) {
-            val bitmap = currentFrame
-            if (bitmap != null && !bitmap.isRecycled) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val imgBitmap = bitmap.asImageBitmap()
-                    drawImage(
-                        image = imgBitmap,
-                        dstOffset = IntOffset.Zero,
-                        dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt())
-                    )
-                }
-            } else {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = PrimaryBlue)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("Streaming desktop screen...", color = TextSecondary, fontSize = 14.sp)
-                    }
-                }
-            }
-        }
+        )
 
         // Single Floating Toggle Button (Controls Hide / Unhide)
         Surface(
@@ -187,7 +169,7 @@ fun RemoteScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "${serverInfo?.serverName ?: "PC"} • $measuredFps FPS",
+                            text = "${serverInfo?.serverName ?: "PC"} • $measuredFps FPS • ${measuredLatency}ms",
                             color = TextPrimary,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
@@ -200,7 +182,8 @@ fun RemoteScreen(
                 // Mode Toggle Button (Trackpad / Direct Touch)
                 Surface(
                     color = CardBg.copy(alpha = 0.9f),
-                    shape = RoundedCornerShape(20.dp)
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, Color(0xFF334155))
                 ) {
                     IconButton(
                         onClick = {
@@ -249,6 +232,7 @@ fun RemoteScreen(
             Surface(
                 color = CardBg,
                 shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Color(0xFF334155)),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
@@ -287,7 +271,7 @@ fun RemoteScreen(
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                     ) {
-                        Text("Send", color = Color.Black)
+                        Text("Send", color = Color.Black, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -339,7 +323,6 @@ fun RemoteScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Left Click Button
                         Button(
                             onClick = { viewModel.sendMouseClick("left", "click") },
                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue.copy(alpha = 0.25f)),
@@ -351,7 +334,6 @@ fun RemoteScreen(
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        // Keyboard Toggle Button
                         IconButton(
                             onClick = { showKeyboardInput = !showKeyboardInput },
                             modifier = Modifier.size(44.dp)
@@ -359,7 +341,6 @@ fun RemoteScreen(
                             Icon(Icons.Default.Keyboard, contentDescription = "Keyboard", tint = PrimaryBlue)
                         }
 
-                        // Scroll Up Button
                         IconButton(
                             onClick = { viewModel.sendMouseScroll(-120) },
                             modifier = Modifier.size(44.dp)
@@ -367,7 +348,6 @@ fun RemoteScreen(
                             Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Scroll Up", tint = TextPrimary)
                         }
 
-                        // Scroll Down Button
                         IconButton(
                             onClick = { viewModel.sendMouseScroll(120) },
                             modifier = Modifier.size(44.dp)
@@ -377,7 +357,6 @@ fun RemoteScreen(
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        // Right Click Button
                         Button(
                             onClick = { viewModel.sendMouseClick("right", "click") },
                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue.copy(alpha = 0.25f)),
@@ -389,6 +368,70 @@ fun RemoteScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DirectSurfaceRenderer(
+    viewModel: RemoteViewModel,
+    modifier: Modifier = Modifier
+) {
+    val coroutineScope = rememberCoroutineScope()
+
+    AndroidView(
+        factory = { context ->
+            FastStreamSurfaceView(context).apply {
+                coroutineScope.launch(Dispatchers.Default) {
+                    viewModel.wsManager.frameFlow.collect { bitmap ->
+                        renderBitmap(bitmap)
+                    }
+                }
+            }
+        },
+        modifier = modifier
+    )
+}
+
+private class FastStreamSurfaceView(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
+    private val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG)
+    private val destRect = Rect()
+    private var isSurfaceReady = false
+
+    init {
+        holder.addCallback(this)
+    }
+
+    override fun surfaceCreated(holder: SurfaceHolder) {
+        isSurfaceReady = true
+    }
+
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        destRect.set(0, 0, width, height)
+    }
+
+    override fun surfaceDestroyed(holder: SurfaceHolder) {
+        isSurfaceReady = false
+    }
+
+    fun renderBitmap(bitmap: Bitmap) {
+        if (!isSurfaceReady || bitmap.isRecycled) return
+
+        try {
+            val canvas = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                holder.lockHardwareCanvas()
+            } else {
+                holder.lockCanvas()
+            }
+
+            if (canvas != null) {
+                try {
+                    canvas.drawBitmap(bitmap, null, destRect, paint)
+                } finally {
+                    holder.unlockCanvasAndPost(canvas)
+                }
+            }
+        } catch (e: Exception) {
         }
     }
 }

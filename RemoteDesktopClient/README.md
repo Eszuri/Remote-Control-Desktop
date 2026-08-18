@@ -1,6 +1,6 @@
 # PC Remote Client (Android Kotlin Native)
 
-Aplikasi Android native berperforma tinggi yang dibangun menggunakan **Jetpack Compose**, **Material Design 3**, dan **CameraX** untuk mengendalikan PC Windows secara penuh dari genggaman (Mouse, Keyboard, Layar Fullscreen Immersive, dan Windows Shortcuts).
+Aplikasi Android native berperforma tinggi yang dibangun menggunakan **Jetpack Compose**, **Material Design 3**, dan **CameraX** untuk mengendalikan PC Windows secara penuh dari genggaman (Mouse, Keyboard, Layar Fullscreen Immersive, dan Windows Shortcuts) secara instan tanpa PIN.
 
 ---
 
@@ -46,12 +46,12 @@ Aplikasi Android native berperforma tinggi yang dibangun menggunakan **Jetpack C
 - **Virtual Keyboard & Unicode Input:**
   - Dialog pop-up keyboard untuk mengetik kalimat panjang, angka, simbol spesial, dan emoji, langsung terkirim dan diketikkan secara native ke aplikasi PC yang aktif.
 
-### 4. Koneksi Cepat & Otomatis
+### 4. Koneksi Instan (Zero Configuration)
 - **QR Code Camera Scanner (CameraX + ML Kit):**
-  - Cukup arahkan kamera smartphone ke QR Code pada aplikasi server Windows untuk pairing instan (IP, Port, dan PIN terisi otomatis).
+  - Cukup arahkan kamera smartphone ke QR Code pada aplikasi server Windows untuk pairing instan satu detik.
 - **LAN Auto-Discovery (UDP Socket):**
-  - Tombol **Scan LAN** akan memancarkan broadcast UDP di port `9091`.
-  - Menampilkan daftar server Windows di jaringan Wi-Fi lokal dan terkoneksi hanya dengan satu klik.
+  - Tombol **Scan LAN** memancarkan broadcast UDP di port `9091`.
+  - Menampilkan daftar server Windows di jaringan Wi-Fi lokal dan terkoneksi hanya dengan satu ketukan tombol **Connect**.
 - **Koneksi Jarak Jauh (WAN / VPN):**
   - Mendukung IP Publik router atau alamat IP VPN seperti Tailscale / ZeroTier / Ngrok untuk kendali jarak jauh antar kota/negara.
 
@@ -89,7 +89,7 @@ RemoteDesktopClient/
 │       └── java/com/remotedesktop/client/
 │           ├── MainActivity.kt         # Entry point, full-screen immersive controller
 │           ├── data/
-│           │   └── Protocol.kt         # Model pesan JSON, TouchMode, & ConnectionState
+│           │   └── Protocol.kt         # Data Transfer Objects, TouchMode, & ConnectionState
 │           ├── network/
 │           │   ├── WebSocketManager.kt # OkHttp WebSocket, receiver frame JPEG, & sender JSON
 │           │   └── LanDiscoveryManager.kt # UDP Broadcast scanner (Port 9091)

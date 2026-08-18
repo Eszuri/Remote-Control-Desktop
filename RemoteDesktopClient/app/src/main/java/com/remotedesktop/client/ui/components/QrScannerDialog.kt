@@ -2,7 +2,6 @@ package com.remotedesktop.client.ui.components
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.util.Size
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -32,7 +31,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import com.remotedesktop.client.ui.theme.*
 import kotlinx.serialization.json.Json
@@ -43,7 +41,7 @@ import java.util.concurrent.Executors
 @Composable
 fun QrScannerDialog(
     onDismiss: () -> Unit,
-    onQrScanned: (ip: String, port: String, pin: String) -> Unit
+    onQrScanned: (ip: String, port: String) -> Unit
 ) {
     val context = LocalContext.current
     var hasCameraPermission by remember {
@@ -217,7 +215,7 @@ private fun CameraPreviewView(
 
 private fun parseAndApplyQr(
     rawText: String,
-    onQrScanned: (ip: String, port: String, pin: String) -> Unit
+    onQrScanned: (ip: String, port: String) -> Unit
 ) {
     try {
         if (rawText.trim().startsWith("{")) {
@@ -225,9 +223,8 @@ private fun parseAndApplyQr(
             val element = json.parseToJsonElement(rawText).jsonObject
             val ip = element["ip"]?.jsonPrimitive?.content ?: ""
             val port = element["port"]?.jsonPrimitive?.content ?: "9090"
-            val pin = element["pin"]?.jsonPrimitive?.content ?: ""
             if (ip.isNotEmpty()) {
-                onQrScanned(ip, port, pin)
+                onQrScanned(ip, port)
                 return
             }
         }
@@ -238,9 +235,8 @@ private fun parseAndApplyQr(
             val parts = stripped.split(":", "/")
             val ip = parts.getOrNull(0) ?: ""
             val port = parts.getOrNull(1) ?: "9090"
-            val pin = parts.getOrNull(2) ?: ""
             if (ip.isNotEmpty()) {
-                onQrScanned(ip, port, pin)
+                onQrScanned(ip, port)
                 return
             }
         }

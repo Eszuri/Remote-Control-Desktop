@@ -1,6 +1,6 @@
 # 🖥️📱 PC Remote Control Desktop (Full-Stack System)
 
-Sistem *Remote Desktop Control* berperforma tinggi dan berlatensi ultra-rendah (*ultra-low latency*) yang menghubungkan **Smartphone Android (Client)** dengan **PC Windows (Server)** secara nirkabel melalui jaringan Wi-Fi lokal (LAN) maupun internet jarak jauh (WAN / VPN).
+Sistem *Remote Desktop Control* berperforma tinggi dan berlatensi ultra-rendah (*ultra-low latency*) yang menghubungkan **Smartphone Android (Client)** dengan **PC Windows (Server)** secara nirkabel melalui jaringan Wi-Fi lokal (LAN) maupun internet jarak jauh (WAN / VPN) secara instan tanpa PIN.
 
 ---
 
@@ -18,7 +18,7 @@ Proyek ini merupakan solusi *full-stack* independen tanpa ketergantungan pihak k
 |  | (Jetpack Compose)   |                               |      (WPF / .NET 10)    | |
 |  |                     |        UDP Broadcast (9091)   |                         | |
 |  |  [LanDiscovery]     | ============================> | [UdpDiscoveryServer]    | |
-|  |  [CameraX QR Scan]  | <---------------------------- | [QRCoder / PIN Display] | |
+|  |  [CameraX QR Scan]  | <---------------------------- | [QRCoder Instant Pair]  | |
 |  |                     |                               |                         | |
 |  |                     |        WebSocket (TCP 9090)   |                         | |
 |  |  [OkHttp WS]        | ----------------------------> | [Fleck WebSocketServer] | |
@@ -43,7 +43,7 @@ Proyek ini merupakan solusi *full-stack* independen tanpa ketergantungan pihak k
 | **Kendali Keyboard** | Full Unicode Text Injection (`KEYEVENTF_UNICODE`) | Pop-up Virtual Keyboard & IME Text Forwarding (mendukung emoji & simbol) |
 | **Pintasan Cepat** | Eksekusi otomatis shortcut Windows | Toolbar Pintasan: `Win+D`, `Alt+Tab`, `Ctrl+C`, `Ctrl+V`, `Ctrl+Z`, `Ctrl+A`, dll. |
 | **Konektivitas** | Fleck WebSocket Server (TCP 9090) & UDP Discovery (9091) | Pemindaian LAN otomatis & QR Code Camera Scanner (CameraX + ML Kit) |
-| **Keamanan** | Autentikasi PIN 6 Digit dinamis | Penyimpanan sesi & proteksi PIN sebelum transmisi kontrol |
+| **Kemudahan Akses** | Koneksi instan tanpa PIN (*Zero PIN configuration*) | Otomatis terhubung setelah scan QR atau klik daftar server LAN |
 
 ---
 
@@ -59,7 +59,7 @@ Remote Control Desktop/
 │   ├── .gitignore              # Gitignore Khusus C# / WPF / .NET
 │   ├── RemoteDesktopServer.csproj
 │   ├── App.xaml / App.xaml.cs
-│   ├── MainWindow.xaml / .cs   # Modern Dark UI Dashboard & Logging
+│   ├── MainWindow.xaml / .cs   # Modern Dark UI Dashboard, Sliders, & Logging
 │   ├── Core/
 │   │   ├── IScreenCapture.cs   # Interface Capture
 │   │   ├── DxgiScreenCapture.cs# Engine DirectX 11 Desktop Duplication
@@ -108,7 +108,7 @@ Remote Control Desktop/
    dotnet run
    ```
 3. Atau jalankan file executable hasil publish (`RemoteDesktopServer.exe`).
-4. Catat **IP Address**, **Port** (default: `9090`), dan **PIN Code** yang tampil pada antarmuka server.
+4. Server akan otomatis aktif dan menampilkan IP lokal dan QR Code.
 
 > 💡 **Rekomendasi:** Jalankan server sebagai **Administrator** (*Run as Administrator*) agar server memiliki izin mengendalikan aplikasi ber-hak akses tinggi (seperti Task Manager, dialog UAC, dan game fullscreen).
 
@@ -116,11 +116,11 @@ Remote Control Desktop/
 
 ### Langkah 2: Jalankan Klien di Smartphone Android
 1. Pastikan HP Android terhubung ke jaringan Wi-Fi yang **sama** dengan PC.
-2. Buka proyek `RemoteDesktopClient` di **Android Studio**, lalu jalankan di HP Android Anda (atau install APK `app-debug.apk`).
-3. Pilih salah satu cara koneksi:
+2. Buka proyek `RemoteDesktopClient` di **Android Studio**, lalu jalankan di HP Android Anda (atau pasang file APK `app-debug.apk`).
+3. Pilih salah satu cara koneksi instan:
    - **Opsi A (Scan QR):** Tekan tombol **Scan QR** di HP, lalu arahkan kamera ke QR Code di layar PC.
    - **Opsi B (Scan LAN):** Tekan **Scan LAN**, tunggu daftar PC muncul, lalu tekan **Connect**.
-   - **Opsi C (Manual):** Masukkan IP PC, Port (`9090`), dan PIN Code, lalu tekan **Connect**.
+   - **Opsi C (Manual):** Masukkan IP PC dan Port (`9090`), lalu tekan **Connect Now**.
 4. Layar PC Windows akan langsung tampil di smartphone Android dalam mode layar penuh *immersive*!
 
 ---
@@ -133,7 +133,7 @@ Jika Anda ingin mengontrol PC dari luar rumah melalui jaringan seluler (4G/5G) a
 1. Pasang **Tailscale** di PC Windows dan HP Android Anda.
 2. Login dengan akun yang sama pada kedua perangkat.
 3. Masukkan IP Tailscale PC Windows Anda (misal: `100.x.y.z`) ke dalam aplikasi Android pada kolom IP Address.
-4. Tekan **Connect** — koneksi akan terenkripsi secara *end-to-end* tanpa perlu *port forwarding*.
+4. Tekan **Connect Now** — koneksi akan terenkripsi secara *end-to-end* tanpa perlu *port forwarding*.
 
 ### Menggunakan Tunneling (Ngrok)
 1. Di PC Windows, jalankan ngrok untuk mengekspos port 9090:
@@ -157,29 +157,11 @@ Jika Anda ingin mengontrol PC dari luar rumah melalui jaringan seluler (4G/5G) a
   {
     "type": "REMOTE_SERVER_INFO",
     "serverName": "DESKTOP-WIN11",
-    "port": 9090,
-    "hasPin": true
+    "port": 9090
   }
   ```
 
-### 2. Autentikasi WebSocket (TCP 9090)
-- **Klien mengirim pesan autentikasi:**
-  ```json
-  { "type": "auth", "pin": "123456" }
-  ```
-- **Server merespon hasil autentikasi:**
-  ```json
-  {
-    "type": "auth_result",
-    "success": true,
-    "message": "Authentication successful",
-    "serverName": "DESKTOP-WIN11",
-    "screenWidth": 1920,
-    "screenHeight": 1080
-  }
-  ```
-
-### 3. Binary Frame Stream Header (Server -> Klien)
+### 2. Binary Frame Stream Header (Server -> Klien)
 | Offset | Tipe Data | Keterangan |
 | :--- | :--- | :--- |
 | `0` | `byte` | Magic Byte `0x53` ('S') untuk menandai Screen Frame |
@@ -188,7 +170,7 @@ Jika Anda ingin mengontrol PC dari luar rumah melalui jaringan seluler (4G/5G) a
 | `7 .. 8` | `UInt16` (BE) | Tinggi frame layar (Height) |
 | `9 .. End` | `byte[]` | Raw Binary Payload Gambar JPEG |
 
-### 4. JSON Input Commands (Klien -> Server)
+### 3. JSON Input Commands (Klien -> Server)
 - **Gerakan Mouse Delta (Trackpad):**
   ```json
   { "type": "mouse_move_delta", "dx": 15, "dy": -10 }
@@ -203,7 +185,7 @@ Jika Anda ingin mengontrol PC dari luar rumah melalui jaringan seluler (4G/5G) a
   ```
 - **Ketik Teks Langsung (Unicode):**
   ```json
-  { "type": "text_input", "text": "Hello World!" }
+  { "type": "text_input", "text": "Hello World! 🚀" }
   ```
 - **Pintasan Windows:**
   ```json

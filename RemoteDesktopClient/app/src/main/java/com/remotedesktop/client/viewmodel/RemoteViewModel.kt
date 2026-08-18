@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.remotedesktop.client.data.ClientMessage
@@ -29,6 +30,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     val errorMessage = wsManager.errorMessage
     val discoveredServers = discoveryManager.discoveredServers
     val isSearching = discoveryManager.isSearching
+    val measuredLatency = wsManager.measuredLatency
 
     private val _currentFrame = MutableStateFlow<Bitmap?>(null)
     val currentFrame: StateFlow<Bitmap?> = _currentFrame.asStateFlow()
@@ -42,10 +44,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     private val _port = MutableStateFlow("9090")
     val port: StateFlow<String> = _port.asStateFlow()
 
-    private val _pin = MutableStateFlow("123456")
-    val pin: StateFlow<String> = _pin.asStateFlow()
-
-    private val _fps = MutableStateFlow(30)
+    private val _fps = MutableStateFlow(60)
     val fps: StateFlow<Int> = _fps.asStateFlow()
 
     private val _quality = MutableStateFlow(70)
@@ -69,6 +68,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
                     _measuredFps.value = frameCounter
                     frameCounter = 0
                     lastFpsTimestamp = now
+                    Log.i("RemoteDesktop", "[1s Performance] FPS: ${_measuredFps.value} | Latency: ${measuredLatency.value} ms")
                 }
             }
         }
@@ -76,13 +76,12 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setIp(ip: String) { _ipAddress.value = ip }
     fun setPort(p: String) { _port.value = p }
-    fun setPin(p: String) { _pin.value = p }
     fun setTouchMode(mode: TouchMode) { _touchMode.value = mode }
     fun toggleHaptic(enabled: Boolean) { _hapticEnabled.value = enabled }
 
     fun connect() {
         val url = "ws://${_ipAddress.value.trim()}:${_port.value.trim()}"
-        wsManager.connect(url, _pin.value.trim())
+        wsManager.connect(url)
     }
 
     fun connectToDiscovered(serverIp: String, serverPort: Int) {

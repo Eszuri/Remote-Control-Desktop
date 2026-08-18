@@ -1,175 +1,450 @@
 <Window x:Class="RemoteDesktopServer.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="PC Remote Control Server" Height="680" Width="820"
+        Title="PC Remote Control Server"
+        Height="720"
+        Width="1040"
+        MinWidth="720"
+        MinHeight="620"
         WindowStartupLocation="CenterScreen"
-        Background="#0F172A" Foreground="#F8FAFC"
-        FontFamily="Segoe UI">
+        Background="{StaticResource BrushCanvas}"
+        Foreground="{StaticResource BrushTextPrimary}"
+        FontFamily="{StaticResource FontUi}"
+        SizeChanged="MainWindow_SizeChanged"
+        KeyDown="Window_KeyDown">
 
-    <Window.Resources>
-        <Style TargetType="Button">
-            <Setter Property="Background" Value="#3B82F6"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Padding" Value="14,8"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                CornerRadius="8"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#2563EB"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
-        <Style TargetType="TextBox">
-            <Setter Property="Background" Value="#1E293B"/>
-            <Setter Property="Foreground" Value="#F8FAFC"/>
-            <Setter Property="BorderBrush" Value="#334155"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="8,6"/>
-            <Setter Property="FontSize" Value="14"/>
-        </Style>
-    </Window.Resources>
-
-    <Grid Margin="20">
+    <Grid Margin="24">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Header -->
-        <Border Grid.Row="0" Background="#1E293B" CornerRadius="12" Padding="16" Margin="0,0,0,16">
+        <Border Grid.Row="0"
+                Style="{StaticResource PanelCardStyle}"
+                Padding="20,18"
+                Margin="0,0,0,18">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0">
-                    <TextBlock Text="🚀 PC Remote Control Server" FontSize="20" FontWeight="Bold" Foreground="#38BDF8"/>
-                    <TextBlock Text="Native Windows Remote Server for Android Client" FontSize="13" Foreground="#94A3B8" Margin="0,4,0,0"/>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="PC Remote Control Server"
+                                   FontSize="21"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource BrushTextPrimary}" />
+                        <Border Background="{StaticResource BrushSurfaceRaised}"
+                                BorderBrush="{StaticResource BrushBorderStrong}"
+                                BorderThickness="1"
+                                CornerRadius="5"
+                                Padding="8,3"
+                                Margin="12,0,0,0"
+                                VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtCaptureEngine"
+                                       Text="DirectX DXGI (GPU)"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource BrushAccent}" />
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="Control your Windows desktop from Android over a secure local connection."
+                               FontSize="12"
+                               Foreground="{StaticResource BrushTextSecondary}"
+                               TextWrapping="Wrap"
+                               Margin="0,5,12,0" />
                 </StackPanel>
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border x:Name="StatusBadge" Background="#EF4444" CornerRadius="12" Padding="10,4" Margin="0,0,12,0">
-                        <TextBlock x:Name="TxtStatus" Text="STOPPED" FontSize="12" FontWeight="Bold" Foreground="White"/>
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="18,0,0,0">
+                    <Border x:Name="StatusBadge"
+                            Style="{StaticResource StatusBadgeStyle}"
+                            Margin="0,0,12,0"
+                            AutomationProperties.Name="Server status">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse x:Name="StatusIndicatorDot"
+                                     Width="8"
+                                     Height="8"
+                                     Fill="{StaticResource BrushSuccess}"
+                                     Margin="0,0,7,0" />
+                            <TextBlock x:Name="TxtStatus"
+                                       Text="STOPPED"
+                                       FontSize="11"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource BrushSuccess}" />
+                        </StackPanel>
                     </Border>
-                    <Button x:Name="BtnToggleServer" Content="Start Server" Width="130" Click="BtnToggleServer_Click"/>
+
+                    <Button x:Name="BtnToggleServer"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            Content="Start Server"
+                            Width="132"
+                            Click="BtnToggleServer_Click"
+                            AutomationProperties.Name="Start or stop server"
+                            AutomationProperties.HelpText="Starts or stops the WebSocket and LAN discovery services."
+                            ToolTip="Start or stop the server"
+                            TabIndex="3" />
                 </StackPanel>
             </Grid>
         </Border>
 
-        <!-- Main Content -->
-        <Grid Grid.Row="1">
+        <Grid x:Name="MainContentGrid" Grid.Row="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="0" />
+            </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="340"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="2*" />
+                <ColumnDefinition Width="3*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Left Panel: Connection Info & QR -->
-            <Border Grid.Column="0" Background="#1E293B" CornerRadius="12" Padding="16" Margin="0,0,12,0">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <Border x:Name="ConnectionPanel"
+                    Grid.Column="0"
+                    Style="{StaticResource PanelCardStyle}"
+                    Margin="0,0,9,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
-                        <TextBlock Text="📱 Connect from Mobile" FontSize="16" FontWeight="Bold" Foreground="#F1F5F9" Margin="0,0,0,12"/>
+                        <DockPanel Margin="0,0,0,16">
+                            <TextBlock Text="Connect from mobile"
+                                       Style="{StaticResource SectionTitleStyle}" />
+                            <TextBlock Text="Scan to pair"
+                                       HorizontalAlignment="Right"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource BrushAccent}"
+                                       Margin="12,2,0,0" />
+                        </DockPanel>
 
-                        <!-- QR Code Container -->
-                        <Border Background="#0F172A" CornerRadius="8" Padding="10" HorizontalAlignment="Center" Margin="0,0,0,14">
-                            <Image x:Name="ImgQrCode" Width="180" Height="180" Stretch="Uniform"/>
+                        <Border x:Name="BorderQrThumbnail"
+                                Background="#FFFFFF"
+                                BorderBrush="#D5DEE8"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                Padding="12"
+                                HorizontalAlignment="Center"
+                                Cursor="Hand"
+                                MouseLeftButtonDown="BorderQrThumbnail_MouseLeftButtonDown"
+                                ToolTip="Click to view enlarged QR code in center"
+                                Margin="0,0,0,18">
+                            <StackPanel HorizontalAlignment="Center">
+                                <Image x:Name="ImgQrCode"
+                                       Width="176"
+                                       Height="176"
+                                       Stretch="Uniform"
+                                       AutomationProperties.Name="Server connection QR code"
+                                       AutomationProperties.HelpText="Click to view enlarged QR code." />
+                                <TextBlock Text="🔍 Click to enlarge"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           Foreground="#475569"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,6,0,0"/>
+                            </StackPanel>
                         </Border>
 
-                        <!-- Info items -->
-                        <TextBlock Text="Local IP Address:" Foreground="#94A3B8" FontSize="12"/>
-                        <TextBox x:Name="TxtIpAddress" IsReadOnly="True" Margin="0,4,0,10" FontWeight="Bold"/>
-
-                        <Grid Margin="0,0,0,10">
+                        <TextBlock Text="Server IP address" Style="{StaticResource FieldLabelStyle}" />
+                        <Grid Margin="0,5,0,16">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0" Margin="0,0,6,0">
-                                <TextBlock Text="Port:" Foreground="#94A3B8" FontSize="12"/>
-                                <TextBox x:Name="TxtPort" Text="9090" Margin="0,4,0,0"/>
-                            </StackPanel>
-
-                            <StackPanel Grid.Column="1" Margin="6,0,0,0">
-                                <TextBlock Text="PIN Code:" Foreground="#94A3B8" FontSize="12"/>
-                                <TextBox x:Name="TxtPin" Text="123456" Margin="0,4,0,0"/>
+                            <TextBox x:Name="TxtIpAddress"
+                                     IsReadOnly="True"
+                                     FontWeight="Bold"
+                                     Foreground="{StaticResource BrushAccent}"
+                                     AutomationProperties.Name="Server IP address"
+                                     AutomationProperties.HelpText="The local IP address used by connected clients."
+                                     TabIndex="1" />
+                            <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                <Button x:Name="BtnCopyIp"
+                                        Content="Copy"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Click="BtnCopyIp_Click"
+                                        AutomationProperties.Name="Copy server IP address"
+                                        ToolTip="Copy the server IP address"
+                                        TabIndex="2" />
+                                <TextBlock x:Name="TxtCopyFeedback"
+                                           Text=""
+                                           FontSize="10"
+                                           Foreground="{StaticResource BrushSuccess}"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,4,0,0" />
                             </StackPanel>
                         </Grid>
 
-                        <TextBlock Text="Connected Clients:" Foreground="#94A3B8" FontSize="12"/>
-                        <TextBlock x:Name="TxtClientCount" Text="0 Devices" FontSize="16" FontWeight="Bold" Foreground="#10B981" Margin="0,4,0,14"/>
+                        <TextBlock Text="Connection port" Style="{StaticResource FieldLabelStyle}" />
+                        <TextBox x:Name="TxtPort"
+                                 Text="9090"
+                                 Margin="0,5,0,0"
+                                 LostFocus="TxtPort_LostFocus"
+                                 TextChanged="TxtPort_TextChanged"
+                                 AutomationProperties.Name="Connection port"
+                                 AutomationProperties.HelpText="Enter a TCP port from 1 to 65535. Stop the server before changing it."
+                                 ToolTip="TCP port used by the WebSocket server"
+                                 TabIndex="0" />
+                        <TextBlock x:Name="TxtPortValidation"
+                                   Text=""
+                                   Style="{StaticResource ValidationTextStyle}" />
 
-                        <Separator Background="#334155" Margin="0,0,0,14"/>
+                        <Border Background="{StaticResource BrushSurfaceRaised}"
+                                BorderBrush="{StaticResource BrushBorder}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="12,10"
+                                Margin="0,14,0,18">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="Active clients"
+                                               FontSize="11"
+                                               Foreground="{StaticResource BrushTextSecondary}" />
+                                    <TextBlock Text="Connected devices"
+                                               FontSize="11"
+                                               Foreground="{StaticResource BrushTextMuted}"
+                                               Margin="0,2,0,0" />
+                                </StackPanel>
+                                <TextBlock x:Name="TxtClientCount"
+                                           Grid.Column="1"
+                                           Text="0 Devices"
+                                           FontSize="14"
+                                           FontWeight="Bold"
+                                           Foreground="{StaticResource BrushSuccess}"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
 
-                        <!-- Stream settings -->
-                        <TextBlock Text="⚙️ Stream Settings" FontSize="14" FontWeight="Bold" Foreground="#F1F5F9" Margin="0,0,0,8"/>
+                        <Separator Background="{StaticResource BrushBorder}" Margin="0,0,0,18" />
 
-                        <TextBlock Text="Target FPS:" Foreground="#94A3B8" FontSize="12"/>
-                        <DockPanel Margin="0,4,0,10">
-                            <TextBlock x:Name="TxtFpsVal" Text="30 FPS" Foreground="#38BDF8" Width="50" DockPanel.Dock="Right" TextAlignment="Right"/>
-                            <Slider x:Name="SliderFps" Minimum="10" Maximum="60" Value="30" TickFrequency="5" IsSnapToTickEnabled="True" ValueChanged="SliderFps_ValueChanged"/>
+                        <TextBlock Text="Stream configuration"
+                                   Style="{StaticResource SectionTitleStyle}"
+                                   Margin="0,0,0,12" />
+                        <TextBlock Text="Adjust these defaults for new and active sessions."
+                                   FontSize="11"
+                                   Foreground="{StaticResource BrushTextMuted}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,14" />
+
+                        <DockPanel Margin="0,0,0,4">
+                            <TextBlock Text="Target FPS" Style="{StaticResource FieldLabelStyle}" />
+                            <TextBlock x:Name="TxtFpsVal"
+                                       Text="30 FPS"
+                                       Style="{StaticResource ValueTextStyle}"
+                                       HorizontalAlignment="Right" />
                         </DockPanel>
+                        <Slider x:Name="SliderFps"
+                                Minimum="10"
+                                Maximum="60"
+                                Value="30"
+                                TickFrequency="5"
+                                IsSnapToTickEnabled="True"
+                                ValueChanged="SliderFps_ValueChanged"
+                                AutomationProperties.Name="Target frames per second"
+                                AutomationProperties.HelpText="Choose a target frame rate between 10 and 60 FPS."
+                                ToolTip="Target frame rate: 10 to 60 FPS"
+                                TabIndex="4" />
 
-                        <TextBlock Text="JPEG Quality:" Foreground="#94A3B8" FontSize="12"/>
-                        <DockPanel Margin="0,4,0,10">
-                            <TextBlock x:Name="TxtQualityVal" Text="70%" Foreground="#38BDF8" Width="50" DockPanel.Dock="Right" TextAlignment="Right"/>
-                            <Slider x:Name="SliderQuality" Minimum="20" Maximum="95" Value="70" TickFrequency="5" IsSnapToTickEnabled="True" ValueChanged="SliderQuality_ValueChanged"/>
+                        <DockPanel Margin="0,14,0,4">
+                            <TextBlock Text="JPEG quality" Style="{StaticResource FieldLabelStyle}" />
+                            <TextBlock x:Name="TxtQualityVal"
+                                       Text="70%"
+                                       Style="{StaticResource ValueTextStyle}"
+                                       HorizontalAlignment="Right" />
                         </DockPanel>
+                        <Slider x:Name="SliderQuality"
+                                Minimum="20"
+                                Maximum="95"
+                                Value="70"
+                                TickFrequency="5"
+                                IsSnapToTickEnabled="True"
+                                ValueChanged="SliderQuality_ValueChanged"
+                                AutomationProperties.Name="JPEG image quality"
+                                AutomationProperties.HelpText="Choose JPEG quality between 20 and 95 percent."
+                                ToolTip="JPEG quality: 20 to 95 percent"
+                                TabIndex="5" />
                     </StackPanel>
                 </ScrollViewer>
             </Border>
 
-            <!-- Right Panel: Live Activity Logs -->
-            <Border Grid.Column="1" Background="#1E293B" CornerRadius="12" Padding="16" Margin="4,0,0,0">
+            <Border x:Name="ActivityPanel"
+                    Grid.Column="1"
+                    Style="{StaticResource PanelCardStyle}"
+                    Margin="9,0,0,0">
                 <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <DockPanel Grid.Row="0" Margin="0,0,0,10">
-                        <TextBlock Text="📋 Server Activity Logs" FontSize="16" FontWeight="Bold" Foreground="#F1F5F9"/>
-                        <Button Content="Clear" HorizontalAlignment="Right" Padding="8,4" FontSize="12" Click="BtnClearLogs_Click"/>
+                    <DockPanel Grid.Row="0" Margin="0,0,0,12">
+                        <StackPanel>
+                            <TextBlock Text="Server activity" Style="{StaticResource SectionTitleStyle}" />
+                            <TextBlock Text="Live events from the server and connected clients"
+                                       FontSize="11"
+                                       Foreground="{StaticResource BrushTextMuted}"
+                                       Margin="0,4,0,0" />
+                        </StackPanel>
+                        <Button x:Name="BtnClearLogs"
+                                Content="Clear logs"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                HorizontalAlignment="Right"
+                                Click="BtnClearLogs_Click"
+                                AutomationProperties.Name="Clear server activity logs"
+                                ToolTip="Clear the activity log"
+                                TabIndex="6" />
                     </DockPanel>
 
-                    <TextBox x:Name="TxtLogs" Grid.Row="1"
-                             IsReadOnly="True"
-                             TextWrapping="Wrap"
-                             VerticalScrollBarVisibility="Auto"
-                             FontFamily="Consolas"
-                             FontSize="12"
-                             Background="#0B1329"
-                             Foreground="#38BDF8"
-                             BorderThickness="0"/>
+                    <Border Grid.Row="1"
+                            Background="{StaticResource BrushSurfaceInset}"
+                            BorderBrush="{StaticResource BrushBorder}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="12">
+                        <TextBox x:Name="TxtLogs"
+                                 IsReadOnly="True"
+                                 TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto"
+                                 HorizontalScrollBarVisibility="Auto"
+                                 FontFamily="{StaticResource FontMono}"
+                                 FontSize="12"
+                                 Background="Transparent"
+                                 Foreground="{StaticResource BrushAccent}"
+                                 BorderThickness="0"
+                                 Padding="0"
+                                 AutomationProperties.Name="Server activity log"
+                                 AutomationProperties.HelpText="Live server activity messages." />
+                    </Border>
 
-                    <TextBlock Grid.Row="2" Text="Tip: Scan the QR code using Android app or connect to ws://IP:PORT"
-                               Foreground="#64748B" FontSize="12" Margin="0,8,0,0"/>
+                    <Border Grid.Row="2"
+                            Background="{StaticResource BrushSurfaceRaised}"
+                            BorderBrush="{StaticResource BrushBorder}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="12"
+                            Margin="0,12,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Connection tip"
+                                       FontSize="11"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource BrushWarning}" />
+                            <TextBlock Text="Open the Android app, scan the QR code, or use Scan LAN. The connection starts without a PIN."
+                                       Foreground="{StaticResource BrushTextSecondary}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Margin="0,4,0,0" />
+                        </StackPanel>
+                    </Border>
                 </Grid>
             </Border>
         </Grid>
 
-        <!-- Footer -->
-        <Border Grid.Row="2" Margin="0,12,0,0">
-            <DockPanel>
-                <TextBlock Text="Status: Ready" x:Name="TxtFooterStatus" Foreground="#94A3B8" FontSize="12"/>
-                <TextBlock Text="Remote Desktop Windows Server v1.0" HorizontalAlignment="Right" Foreground="#64748B" FontSize="12"/>
-            </DockPanel>
+        <Border Grid.Row="2" Margin="0,14,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="TxtFooterStatus"
+                           Text="Server stopped"
+                           Foreground="{StaticResource BrushTextSecondary}"
+                           FontSize="11"
+                           TextWrapping="Wrap"
+                           TextTrimming="CharacterEllipsis"
+                           Margin="0,0,12,0" />
+                <TextBlock Grid.Column="1"
+                           Text="Remote Desktop Windows Server v1.1"
+                           Foreground="{StaticResource BrushTextMuted}"
+                           FontSize="11"
+                           TextAlignment="Right"
+                           TextWrapping="Wrap" />
+            </Grid>
         </Border>
+
+        <!-- Modal Overlay for Enlarged Centered QR Code -->
+        <Grid x:Name="QrModalOverlay"
+              Grid.Row="0"
+              Grid.RowSpan="3"
+              Visibility="Collapsed"
+              Background="#D909111F"
+              MouseDown="QrModalOverlay_MouseDown">
+            <Border Background="{StaticResource BrushSurface}"
+                    BorderBrush="{StaticResource BrushBorderStrong}"
+                    BorderThickness="1"
+                    CornerRadius="16"
+                    Padding="24"
+                    MaxWidth="440"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    MouseDown="QrModalCard_MouseDown">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="32" ShadowDepth="6" Opacity="0.6" Color="#000000"/>
+                </Border.Effect>
+                <StackPanel HorizontalAlignment="Center">
+                    <!-- Modal Header -->
+                    <DockPanel Margin="0,0,0,16" Width="360">
+                        <StackPanel>
+                            <TextBlock Text="📱 Scan QR Code to Connect" FontSize="16" FontWeight="Bold" Foreground="{StaticResource BrushTextPrimary}"/>
+                            <TextBlock Text="Point your Android camera at the QR code" FontSize="11" Foreground="{StaticResource BrushTextMuted}" Margin="0,2,0,0"/>
+                        </StackPanel>
+                        <Button Content="✕"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                HorizontalAlignment="Right"
+                                Padding="8,4"
+                                FontSize="13"
+                                FontWeight="Bold"
+                                Click="BtnCloseQrModal_Click"/>
+                    </DockPanel>
+
+                    <!-- Enlarged QR Code -->
+                    <Border Background="#FFFFFF"
+                            BorderBrush="#D5DEE8"
+                            BorderThickness="1"
+                            CornerRadius="12"
+                            Padding="16"
+                            HorizontalAlignment="Center"
+                            Margin="0,0,0,16">
+                        <Image x:Name="ImgQrCodeEnlarged"
+                               Width="320"
+                               Height="320"
+                               Stretch="Uniform"/>
+                    </Border>
+
+                    <!-- Connection Info Badges -->
+                    <Border Background="{StaticResource BrushSurfaceRaised}"
+                            BorderBrush="{StaticResource BrushBorder}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="14,10"
+                            Width="360"
+                            Margin="0,0,0,16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="Server Address" FontSize="10" Foreground="{StaticResource BrushTextMuted}"/>
+                                <TextBlock x:Name="TxtModalIpAddress" Text="192.168.0.103:9090" FontSize="13" FontWeight="Bold" Foreground="{StaticResource BrushAccent}"/>
+                            </StackPanel>
+                            <TextBlock Text="Instant Connect" Grid.Column="1" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource BrushSuccess}" VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+
+                    <Button Content="Close (or press Esc)"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            HorizontalAlignment="Center"
+                            Padding="20,8"
+                            Click="BtnCloseQrModal_Click"/>
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

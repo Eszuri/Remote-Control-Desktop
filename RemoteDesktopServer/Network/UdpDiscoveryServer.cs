@@ -14,15 +14,13 @@ namespace RemoteDesktopServer.Network
         private CancellationTokenSource? _cts;
         private readonly int _discoveryPort;
         private readonly int _serverPort;
-        private readonly Func<string> _pinProvider;
 
         public event Action<string>? OnLog;
 
-        public UdpDiscoveryServer(int discoveryPort, int serverPort, Func<string> pinProvider)
+        public UdpDiscoveryServer(int discoveryPort, int serverPort)
         {
             _discoveryPort = discoveryPort;
             _serverPort = serverPort;
-            _pinProvider = pinProvider;
         }
 
         public void Start()
@@ -58,13 +56,12 @@ namespace RemoteDesktopServer.Network
                         {
                             type = "REMOTE_SERVER_INFO",
                             serverName = Environment.MachineName,
-                            port = _serverPort,
-                            hasPin = !string.IsNullOrEmpty(_pinProvider())
+                            port = _serverPort
                         };
 
                         byte[] responseBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(responseObj));
                         await _udpClient.SendAsync(responseBytes, responseBytes.Length, result.RemoteEndPoint);
-                        OnLog?.Invoke($"[UDP Discovery] Responded to discovery request from {result.RemoteEndPoint.Address}");
+                        OnLog?.Invoke($"[UDP Discovery] Responded to {result.RemoteEndPoint.Address}");
                     }
                 }
                 catch (OperationCanceledException)

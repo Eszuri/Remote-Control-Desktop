@@ -17,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.remotedesktop.client.data.ConnectionState
@@ -32,7 +31,6 @@ fun ConnectionScreen(
 ) {
     val ip by viewModel.ipAddress.collectAsState()
     val port by viewModel.port.collectAsState()
-    val pin by viewModel.pin.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val discoveredServers by viewModel.discoveredServers.collectAsState()
@@ -43,10 +41,9 @@ fun ConnectionScreen(
     if (showQrScanner) {
         QrScannerDialog(
             onDismiss = { showQrScanner = false },
-            onQrScanned = { scannedIp, scannedPort, scannedPin ->
+            onQrScanned = { scannedIp, scannedPort ->
                 viewModel.setIp(scannedIp)
                 viewModel.setPort(scannedPort)
-                viewModel.setPin(scannedPin)
                 viewModel.connect()
             }
         )
@@ -56,7 +53,7 @@ fun ConnectionScreen(
         modifier = modifier
             .fillMaxSize()
             .background(DarkBg)
-            .padding(24.dp)
+            .padding(20.dp)
     ) {
         // Header
         Row(
@@ -64,41 +61,55 @@ fun ConnectionScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 20.dp)
+                .padding(top = 8.dp, bottom = 18.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Computer,
-                    contentDescription = null,
-                    tint = PrimaryBlue,
-                    modifier = Modifier.size(36.dp)
-                )
+                Surface(
+                    color = PrimaryBlue.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.size(46.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Computer,
+                            contentDescription = null,
+                            tint = PrimaryBlue,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
                         text = "PC Remote Control",
-                        fontSize = 22.sp,
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
                     )
                     Text(
-                        text = "Connect to Windows Server",
-                        fontSize = 13.sp,
+                        text = "Instant Wireless Connection",
+                        fontSize = 12.sp,
                         color = TextSecondary
                     )
                 }
             }
 
-            // Quick Scan QR Button in Header
+            // Quick Scan QR Button
             FilledTonalButton(
                 onClick = { showQrScanner = true },
                 colors = ButtonDefaults.filledTonalButtonColors(containerColor = CardBg),
                 shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, Color(0xFF334155)),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan QR", tint = PrimaryBlue, modifier = Modifier.size(20.dp))
+                Icon(
+                    imageVector = Icons.Default.QrCodeScanner,
+                    contentDescription = "Scan QR",
+                    tint = PrimaryBlue,
+                    modifier = Modifier.size(18.dp)
+                )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Scan QR", color = PrimaryBlue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text("Scan QR", color = PrimaryBlue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
         }
 
@@ -106,7 +117,7 @@ fun ConnectionScreen(
         if (errorMessage != null) {
             Surface(
                 color = ErrorRed.copy(alpha = 0.15f),
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(10.dp),
                 border = BorderStroke(1.dp, ErrorRed),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -119,9 +130,10 @@ fun ConnectionScreen(
                     Icon(
                         imageVector = Icons.Default.ErrorOutline,
                         contentDescription = null,
-                        tint = ErrorRed
+                        tint = ErrorRed,
+                        modifier = Modifier.size(20.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = errorMessage ?: "",
                         color = ErrorRed,
@@ -135,9 +147,10 @@ fun ConnectionScreen(
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = CardBg),
+            border = BorderStroke(1.dp, Color(0xFF334155)),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column(modifier = Modifier.padding(18.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -145,7 +158,7 @@ fun ConnectionScreen(
                 ) {
                     Text(
                         text = "Connection Details",
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = TextPrimary
                     )
@@ -154,7 +167,7 @@ fun ConnectionScreen(
                         onClick = { showQrScanner = true },
                         contentPadding = PaddingValues(0.dp)
                     ) {
-                        Icon(Icons.Default.CameraAlt, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.CameraAlt, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Camera Scan", color = PrimaryBlue, fontSize = 12.sp)
                     }
@@ -162,24 +175,25 @@ fun ConnectionScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                OutlinedTextField(
-                    value = ip,
-                    onValueChange = { viewModel.setIp(it) },
-                    label = { Text("Server IP Address") },
-                    leadingIcon = { Icon(Icons.Default.Wifi, contentDescription = null, tint = PrimaryBlue) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary,
-                        focusedBorderColor = PrimaryBlue,
-                        unfocusedBorderColor = Color(0xFF334155)
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
                 Row(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = ip,
+                        onValueChange = { viewModel.setIp(it) },
+                        label = { Text("PC IP Address") },
+                        placeholder = { Text("e.g. 192.168.1.100") },
+                        leadingIcon = { Icon(Icons.Default.Wifi, contentDescription = null, tint = PrimaryBlue) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            focusedBorderColor = PrimaryBlue,
+                            unfocusedBorderColor = Color(0xFF334155)
+                        ),
+                        modifier = Modifier.weight(0.68f)
+                    )
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
                     OutlinedTextField(
                         value = port,
                         onValueChange = { viewModel.setPort(it) },
@@ -192,57 +206,39 @@ fun ConnectionScreen(
                             focusedBorderColor = PrimaryBlue,
                             unfocusedBorderColor = Color(0xFF334155)
                         ),
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    OutlinedTextField(
-                        value = pin,
-                        onValueChange = { viewModel.setPin(it) },
-                        label = { Text("PIN Code") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        visualTransformation = PasswordVisualTransformation(),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            focusedBorderColor = PrimaryBlue,
-                            unfocusedBorderColor = Color(0xFF334155)
-                        ),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(0.32f)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Button(
                     onClick = { viewModel.connect() },
-                    enabled = connectionState != ConnectionState.CONNECTING && connectionState != ConnectionState.AUTHENTICATING,
+                    enabled = connectionState != ConnectionState.CONNECTING,
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp)
+                        .height(48.dp)
                 ) {
-                    if (connectionState == ConnectionState.CONNECTING || connectionState == ConnectionState.AUTHENTICATING) {
+                    if (connectionState == ConnectionState.CONNECTING) {
                         CircularProgressIndicator(
                             color = Color.Black,
-                            modifier = Modifier.size(22.dp),
+                            modifier = Modifier.size(20.dp),
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(10.dp))
-                        Text("Connecting...", color = Color.Black, fontWeight = FontWeight.Bold)
+                        Text("Connecting to PC...", color = Color.Black, fontWeight = FontWeight.Bold)
                     } else {
                         Icon(Icons.Default.PowerSettingsNew, contentDescription = null, tint = Color.Black)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Connect", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("Connect Now", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         // LAN Auto Discovery Section
         Row(
@@ -250,43 +246,75 @@ fun ConnectionScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Nearby PC Servers (Wi-Fi)",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
+            Column {
+                Text(
+                    text = "Nearby PC Servers",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Auto-detected on local Wi-Fi",
+                    fontSize = 11.sp,
+                    color = TextSecondary
+                )
+            }
 
             TextButton(
                 onClick = { viewModel.searchServers() },
                 enabled = !isSearching
             ) {
                 if (isSearching) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = PrimaryBlue)
+                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = PrimaryBlue)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Scanning...", color = PrimaryBlue, fontSize = 13.sp)
+                    Text("Scanning...", color = PrimaryBlue, fontSize = 12.sp)
                 } else {
-                    Icon(Icons.Default.Refresh, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.Refresh, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Scan LAN", color = PrimaryBlue, fontSize = 13.sp)
+                    Text("Scan LAN", color = PrimaryBlue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         if (discoveredServers.isEmpty()) {
-            Box(
+            Surface(
+                color = CardBg.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Color(0xFF1E293B)),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
+                    .weight(1f)
             ) {
-                Text(
-                    text = if (isSearching) "Searching for Windows servers on local network..." else "No servers found yet. Tap 'Scan QR' or 'Scan LAN'.",
-                    color = TextSecondary,
-                    fontSize = 13.sp
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(20.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Default.Devices,
+                            contentDescription = null,
+                            tint = Color(0xFF475569),
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = if (isSearching) "Searching for Windows PC servers..." else "No PC servers found yet.",
+                            color = TextSecondary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Tap 'Scan QR' or 'Scan LAN' to connect.",
+                            color = Color(0xFF64748B),
+                            fontSize = 11.sp
+                        )
+                    }
+                }
             }
         } else {
             LazyColumn(
@@ -299,6 +327,7 @@ fun ConnectionScreen(
                     Card(
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = CardBg),
+                        border = BorderStroke(1.dp, Color(0xFF334155)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
@@ -308,18 +337,18 @@ fun ConnectionScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
+                                .padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Surface(
-                                    color = PrimaryBlue.copy(alpha = 0.2f),
+                                    color = PrimaryBlue.copy(alpha = 0.15f),
                                     shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.size(44.dp)
+                                    modifier = Modifier.size(40.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
-                                        Icon(Icons.Default.DesktopWindows, contentDescription = null, tint = PrimaryBlue)
+                                        Icon(Icons.Default.DesktopWindows, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(22.dp))
                                     }
                                 }
                                 Spacer(modifier = Modifier.width(12.dp))
@@ -328,10 +357,10 @@ fun ConnectionScreen(
                                         text = server.serverName,
                                         fontWeight = FontWeight.Bold,
                                         color = TextPrimary,
-                                        fontSize = 15.sp
+                                        fontSize = 14.sp
                                     )
                                     Text(
-                                        text = "${server.ip}:${server.port}",
+                                        text = "ws://${server.ip}:${server.port}",
                                         color = TextSecondary,
                                         fontSize = 12.sp
                                     )
@@ -344,7 +373,7 @@ fun ConnectionScreen(
                                 shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                             ) {
-                                Text("Connect", color = Color.Black, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                Text("Connect", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
                         }
                     }

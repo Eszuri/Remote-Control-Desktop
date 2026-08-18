@@ -18,7 +18,8 @@ data class ClientMessage(
     val quality: Int? = null,
     val scale: Double? = null,
     val fps: Int? = null,
-    val timestamp: Long? = null
+    val timestamp: Long? = null,
+    val clientLatency: Long? = null
 )
 
 @Serializable
@@ -29,16 +30,17 @@ data class ServerResponse(
     val serverName: String? = null,
     val screenWidth: Int = 1920,
     val screenHeight: Int = 1080,
-    val timestamp: Long = 0
+    val timestamp: Long = 0,
+    val fps: Int? = null,
+    val latency: Long? = null
 )
 
 @Serializable
 data class DiscoveredServer(
     val type: String = "REMOTE_SERVER_INFO",
     val serverName: String,
-    val ip: String,
-    val port: Int,
-    val hasPin: Boolean
+    val ip: String = "",
+    val port: Int = 9090
 )
 
 enum class TouchMode {
@@ -49,7 +51,6 @@ enum class TouchMode {
 enum class ConnectionState {
     DISCONNECTED,
     CONNECTING,
-    AUTHENTICATING,
     CONNECTED,
     ERROR
 }

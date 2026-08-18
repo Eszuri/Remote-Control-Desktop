@@ -23,6 +23,10 @@ namespace RemoteDesktopServer.Core
         private static ImageCodecInfo? _jpegEncoder;
         private static readonly EncoderParameters _encoderParams = new EncoderParameters(1);
 
+        private readonly MemoryStream _reusableMs = new MemoryStream(1024 * 512);
+        private CapturedFrame _lastFrame;
+        private bool _hasLastFrame = false;
+
         static DxgiScreenCapture()
         {
             foreach (var codec in ImageCodecInfo.GetImageEncoders())
@@ -73,7 +77,7 @@ namespace RemoteDesktopServer.Core
 
                 using var dxgiDevice = _device.QueryInterface<IDXGIDevice>();
                 using var adapter = dxgiDevice.GetAdapter();
-                
+
                 if (adapter.EnumOutputs(0, out var output).Failure)
                 {
                     return false;
@@ -123,9 +127,22 @@ namespace RemoteDesktopServer.Core
 
             try
             {
-                var result = _deskDupl!.AcquireNextFrame(100, out var frameInfo, out var desktopResource);
+                // Use a short 5ms timeout instead of blocking for 100ms
+                var result = _deskDupl!.AcquireNextFrame(5, out var frameInfo, out var desktopResource);
                 if (result.Failure)
                 {
+                    // If timeout, reuse the last captured frame to maintain smooth FPS without latency spike
+                    if (result.Code == Vortice.DXGI.ResultCode.WaitTimeout.Code)
+                    {
+                        if (_hasLastFrame)
+                        {
+                            frame = _lastFrame;
+                            return true;
+                        }
+                        return false;
+                    }
+
+                    // If access lost, re-initialize DXGI
                     if (result.Code == Vortice.DXGI.ResultCode.AccessLost.Code || result.Code == Vortice.DXGI.ResultCode.AccessDenied.Code)
                     {
                         Initialize();
@@ -154,18 +171,19 @@ namespace RemoteDesktopServer.Core
                     {
                         NativeMethods.DrawSystemCursor(gCursor);
                     }
-                    using var ms = new MemoryStream();
+
+                    _reusableMs.SetLength(0);
                     _encoderParams.Param[0] = new EncoderParameter(Encoder.Quality, (long)Math.Clamp(quality, 10, 100));
 
                     if (Math.Abs(scale - 1.0) < 0.01)
                     {
                         if (_jpegEncoder != null)
                         {
-                            bmp.Save(ms, _jpegEncoder, _encoderParams);
+                            bmp.Save(_reusableMs, _jpegEncoder, _encoderParams);
                         }
                         else
                         {
-                            bmp.Save(ms, ImageFormat.Jpeg);
+                            bmp.Save(_reusableMs, ImageFormat.Jpeg);
                         }
                     }
                     else
@@ -179,21 +197,24 @@ namespace RemoteDesktopServer.Core
 
                         if (_jpegEncoder != null)
                         {
-                            scaledBmp.Save(ms, _jpegEncoder, _encoderParams);
+                            scaledBmp.Save(_reusableMs, _jpegEncoder, _encoderParams);
                         }
                         else
                         {
-                            scaledBmp.Save(ms, ImageFormat.Jpeg);
+                            scaledBmp.Save(_reusableMs, ImageFormat.Jpeg);
                         }
                     }
 
                     frame = new CapturedFrame
                     {
-                        Data = ms.ToArray(),
+                        Data = _reusableMs.ToArray(),
                         Width = targetWidth,
                         Height = targetHeight,
                         Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
                     };
+
+                    _lastFrame = frame;
+                    _hasLastFrame = true;
 
                     return true;
                 }
@@ -219,6 +240,7 @@ namespace RemoteDesktopServer.Core
             _device?.Dispose();
             _device = null;
             _isInitialized = false;
+            _hasLastFrame = false;
         }
     }
 }

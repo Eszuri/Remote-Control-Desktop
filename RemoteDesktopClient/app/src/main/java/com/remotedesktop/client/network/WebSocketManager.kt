@@ -2,18 +2,21 @@ package com.remotedesktop.client.network
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.util.Log
 import com.remotedesktop.client.data.ClientMessage
 import com.remotedesktop.client.data.ConnectionState
 import com.remotedesktop.client.data.ServerResponse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -40,6 +43,7 @@ class WebSocketManager(
     }
 
     private var webSocket: WebSocket? = null
+    private var pingJob: Job? = null
 
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
@@ -47,17 +51,22 @@ class WebSocketManager(
     private val _serverInfo = MutableStateFlow<ServerResponse?>(null)
     val serverInfo: StateFlow<ServerResponse?> = _serverInfo.asStateFlow()
 
-    private val _frameFlow = MutableSharedFlow<Bitmap>(extraBufferCapacity = 1)
+    private val _measuredLatency = MutableStateFlow(1L)
+    val measuredLatency: StateFlow<Long> = _measuredLatency.asStateFlow()
+
+    // Conflated frame flow (drop stale frames immediately if decoder/render is busy)
+    private val _frameFlow = MutableSharedFlow<Bitmap>(extraBufferCapacity = 1, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
     val frameFlow: SharedFlow<Bitmap> = _frameFlow.asSharedFlow()
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
-    private var decodeOptions = BitmapFactory.Options().apply {
-        inPreferredConfig = Bitmap.Config.RGB_565 // Faster decoding & lower memory
+    private val decodeOptions = BitmapFactory.Options().apply {
+        inPreferredConfig = Bitmap.Config.RGB_565 // 50% memory saving & faster decoding
+        inMutable = true
     }
 
-    fun connect(wsUrl: String, pin: String) {
+    fun connect(wsUrl: String) {
         disconnect()
 
         _connectionState.value = ConnectionState.CONNECTING
@@ -69,9 +78,9 @@ class WebSocketManager(
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                _connectionState.value = ConnectionState.AUTHENTICATING
-                // Send authentication message
-                send(ClientMessage(type = "auth", pin = pin))
+                _connectionState.value = ConnectionState.CONNECTED
+                sendDirect(ClientMessage(type = "auth"))
+                startPingLoop()
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -84,22 +93,23 @@ class WebSocketManager(
                                 _serverInfo.value = res
                             } else {
                                 _connectionState.value = ConnectionState.ERROR
-                                _errorMessage.value = res.message ?: "Authentication failed (Invalid PIN)"
+                                _errorMessage.value = res.message ?: "Connection rejected"
                             }
                         }
                         "pong" -> {
-                            // Ping-pong latency measurement if needed
+                            val now = System.currentTimeMillis()
+                            val rtt = (now - res.timestamp).coerceAtLeast(1)
+                            _measuredLatency.value = rtt
+                            Log.i("RemoteDesktop", "[Latency Monitor] Ping RTT: ${rtt}ms")
                         }
                     }
                 } catch (e: Exception) {
-                    // Ignore text parsing errors
                 }
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
                 val data = bytes.toByteArray()
                 if (data.size > 9 && data[0] == 0x53.toByte()) { // 'S' header
-                    // Extract payload starting at index 9
                     try {
                         val jpegBytes = data.copyOfRange(9, data.size)
                         val bitmap = BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size, decodeOptions)
@@ -107,38 +117,65 @@ class WebSocketManager(
                             _frameFlow.tryEmit(bitmap)
                         }
                     } catch (e: Exception) {
-                        // Ignore decode error for corrupted frame
                     }
                 }
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 _connectionState.value = ConnectionState.DISCONNECTED
+                stopPingLoop()
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 _connectionState.value = ConnectionState.DISCONNECTED
+                stopPingLoop()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 _connectionState.value = ConnectionState.ERROR
                 _errorMessage.value = t.localizedMessage ?: "Connection failed"
+                stopPingLoop()
             }
         })
     }
 
-    fun send(message: ClientMessage) {
-        scope.launch(Dispatchers.IO) {
-            try {
-                val jsonStr = json.encodeToString(message)
-                webSocket?.send(jsonStr)
-            } catch (e: Exception) {
-                // Ignore send error
+    private fun startPingLoop() {
+        stopPingLoop()
+        pingJob = scope.launch(Dispatchers.IO) {
+            while (isActive) {
+                delay(1000)
+                if (_connectionState.value == ConnectionState.CONNECTED) {
+                    val pingMsg = ClientMessage(
+                        type = "ping",
+                        timestamp = System.currentTimeMillis(),
+                        clientLatency = _measuredLatency.value
+                    )
+                    sendDirect(pingMsg)
+                }
             }
         }
     }
 
+    private fun stopPingLoop() {
+        pingJob?.cancel()
+        pingJob = null
+    }
+
+    // Direct synchronous send (zero dispatch latency, non-blocking via OkHttp)
+    fun sendDirect(message: ClientMessage) {
+        try {
+            val jsonStr = json.encodeToString(message)
+            webSocket?.send(jsonStr)
+        } catch (e: Exception) {
+        }
+    }
+
+    fun send(message: ClientMessage) {
+        sendDirect(message)
+    }
+
     fun disconnect() {
+        stopPingLoop()
         try {
             webSocket?.close(1000, "User disconnected")
             webSocket = null

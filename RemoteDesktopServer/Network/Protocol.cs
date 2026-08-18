@@ -7,7 +7,7 @@ namespace RemoteDesktopServer.Network
         [JsonPropertyName("type")]
         public string Type { get; set; } = string.Empty;
 
-        // Auth
+        // Legacy / Optional Auth
         [JsonPropertyName("pin")]
         public string? Pin { get; set; }
 
@@ -18,7 +18,7 @@ namespace RemoteDesktopServer.Network
         [JsonPropertyName("y")]
         public double? Y { get; set; }
 
-        // Mouse Move Delta
+        // Mouse Move Delta (Trackpad)
         [JsonPropertyName("dx")]
         public int? Dx { get; set; }
 
@@ -52,9 +52,12 @@ namespace RemoteDesktopServer.Network
         [JsonPropertyName("fps")]
         public int? Fps { get; set; }
 
-        // Ping/Pong
+        // Ping/Pong & Latency Tracking
         [JsonPropertyName("timestamp")]
         public long? Timestamp { get; set; }
+
+        [JsonPropertyName("clientLatency")]
+        public long? ClientLatency { get; set; }
     }
 
     public class ServerResponse
@@ -79,5 +82,11 @@ namespace RemoteDesktopServer.Network
 
         [JsonPropertyName("timestamp")]
         public long Timestamp { get; set; }
+
+        [JsonPropertyName("fps")]
+        public int? Fps { get; set; }
+
+        [JsonPropertyName("latency")]
+        public long? Latency { get; set; }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -14,10 +15,11 @@ namespace RemoteDesktopServer.Network
     public class ClientSession
     {
         public IWebSocketConnection Connection { get; set; } = null!;
-        public bool IsAuthenticated { get; set; }
+        public bool IsAuthenticated { get; set; } = true;
         public int TargetQuality { get; set; } = 70;
         public double ScaleFactor { get; set; } = 1.0;
-        public int TargetFps { get; set; } = 30;
+        public int TargetFps { get; set; } = 60;
+        public long LastReportedLatency { get; set; } = 1;
     }
 
     public class RemoteWebSocketServer : IDisposable
@@ -27,22 +29,27 @@ namespace RemoteDesktopServer.Network
         private ScreenCaptureManager? _captureManager;
         private CancellationTokenSource? _streamingCts;
         private Task? _streamingTask;
+        private Task? _metricsTask;
+
+        private int _framesDeliveredCounter = 0;
+        private int _lastMeasuredFps = 0;
+        private double _lastEncodeDurationMs = 0;
 
         public int Port { get; private set; }
-        public string PinCode { get; set; } = "";
-        public int DefaultFps { get; set; } = 30;
+        public int DefaultFps { get; set; } = 60;
         public int DefaultQuality { get; set; } = 70;
         public double DefaultScale { get; set; } = 1.0;
 
         public event Action<string>? OnLog;
         public event Action<int>? OnClientCountChanged;
+        public event Action<int, long, double>? OnMetricsUpdated; // fps, latencyMs, encodeMs
 
         public int ConnectedClientCount => _clients.Count;
+        public string CaptureMethod => _captureManager?.ActiveCaptureMethod ?? "DirectX DXGI (GPU)";
 
-        public RemoteWebSocketServer(int port, string pinCode)
+        public RemoteWebSocketServer(int port)
         {
             Port = port;
-            PinCode = pinCode;
         }
 
         public void Start()
@@ -62,7 +69,7 @@ namespace RemoteDesktopServer.Network
                         var session = new ClientSession
                         {
                             Connection = socket,
-                            IsAuthenticated = string.IsNullOrEmpty(PinCode),
+                            IsAuthenticated = true,
                             TargetFps = DefaultFps,
                             TargetQuality = DefaultQuality,
                             ScaleFactor = DefaultScale
@@ -72,11 +79,7 @@ namespace RemoteDesktopServer.Network
                         OnLog?.Invoke($"[Client Connected] {socket.ConnectionInfo.ClientIpAddress}:{socket.ConnectionInfo.ClientPort}");
                         OnClientCountChanged?.Invoke(_clients.Count);
 
-                        // If no PIN required, send auth success immediately
-                        if (session.IsAuthenticated)
-                        {
-                            SendAuthResult(socket, true, "Authenticated automatically (No PIN required)");
-                        }
+                        SendAuthResult(socket, true, "Connected successfully");
                     };
 
                     socket.OnClose = () =>
@@ -104,6 +107,7 @@ namespace RemoteDesktopServer.Network
 
                 _streamingCts = new CancellationTokenSource();
                 _streamingTask = Task.Run(() => StreamScreenLoop(_streamingCts.Token));
+                _metricsTask = Task.Run(() => MetricLoggerLoop(_streamingCts.Token));
             }
             catch (Exception ex)
             {
@@ -121,33 +125,29 @@ namespace RemoteDesktopServer.Network
                 switch (msg.Type?.ToLowerInvariant())
                 {
                     case "auth":
-                        if (string.IsNullOrEmpty(PinCode) || msg.Pin == PinCode)
-                        {
-                            session.IsAuthenticated = true;
-                            SendAuthResult(session.Connection, true, "Authentication successful");
-                            OnLog?.Invoke($"[Client Auth] {session.Connection.ConnectionInfo.ClientIpAddress} authorized.");
-                        }
-                        else
-                        {
-                            session.IsAuthenticated = false;
-                            SendAuthResult(session.Connection, false, "Invalid PIN code");
-                            OnLog?.Invoke($"[Client Auth] {session.Connection.ConnectionInfo.ClientIpAddress} sent invalid PIN.");
-                        }
+                        session.IsAuthenticated = true;
+                        SendAuthResult(session.Connection, true, "Connected successfully");
                         break;
 
                     case "ping":
+                        long clientSentTime = msg.Timestamp ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                        if (msg.ClientLatency.HasValue && msg.ClientLatency.Value > 0)
+                        {
+                            session.LastReportedLatency = msg.ClientLatency.Value;
+                        }
+
                         var pong = new ServerResponse
                         {
                             Type = "pong",
-                            Timestamp = msg.Timestamp ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                            Timestamp = clientSentTime,
+                            Latency = session.LastReportedLatency,
+                            Fps = _lastMeasuredFps,
                             Success = true
                         };
                         session.Connection.Send(JsonSerializer.Serialize(pong));
                         break;
 
                     default:
-                        // For control commands, client must be authenticated
-                        if (!session.IsAuthenticated) return;
                         ProcessControlCommand(session, msg);
                         break;
                 }
@@ -231,26 +231,36 @@ namespace RemoteDesktopServer.Network
         private async Task StreamScreenLoop(CancellationToken ct)
         {
             uint frameIndex = 0;
+            var stopwatch = new Stopwatch();
+            var encodeStopwatch = new Stopwatch();
 
             while (!ct.IsCancellationRequested)
             {
                 try
                 {
-                    int authenticatedClients = 0;
+                    stopwatch.Restart();
+
+                    int activeClients = 0;
                     foreach (var s in _clients.Values)
                     {
-                        if (s.IsAuthenticated && s.Connection.IsAvailable)
-                            authenticatedClients++;
+                        if (s.Connection.IsAvailable)
+                            activeClients++;
                     }
 
-                    if (authenticatedClients > 0 && _captureManager != null)
+                    if (activeClients > 0 && _captureManager != null)
                     {
                         int quality = DefaultQuality;
                         double scale = DefaultScale;
 
-                        if (_captureManager.CaptureFrame(quality, scale, out var frame))
+                        encodeStopwatch.Restart();
+                        bool captured = _captureManager.CaptureFrame(quality, scale, out var frame);
+                        encodeStopwatch.Stop();
+                        _lastEncodeDurationMs = encodeStopwatch.Elapsed.TotalMilliseconds;
+
+                        if (captured)
                         {
                             frameIndex++;
+                            Interlocked.Increment(ref _framesDeliveredCounter);
 
                             // Packet Structure:
                             // [0] = 0x53 ('S')
@@ -261,7 +271,6 @@ namespace RemoteDesktopServer.Network
                             byte[] packet = new byte[9 + frame.Data.Length];
                             packet[0] = 0x53; // 'S' for Screen Frame
 
-                            // Big-Endian or Little-Endian packing
                             packet[1] = (byte)(frameIndex >> 24);
                             packet[2] = (byte)(frameIndex >> 16);
                             packet[3] = (byte)(frameIndex >> 8);
@@ -277,7 +286,7 @@ namespace RemoteDesktopServer.Network
                             foreach (var pair in _clients)
                             {
                                 var client = pair.Value;
-                                if (client.IsAuthenticated && client.Connection.IsAvailable)
+                                if (client.Connection.IsAvailable)
                                 {
                                     try
                                     {
@@ -291,8 +300,19 @@ namespace RemoteDesktopServer.Network
                         }
                     }
 
-                    int delayMs = 1000 / Math.Max(1, DefaultFps);
-                    await Task.Delay(delayMs, ct);
+                    long elapsedMs = stopwatch.ElapsedMilliseconds;
+                    int targetFps = Math.Clamp(DefaultFps, 10, 60);
+                    int targetIntervalMs = 1000 / targetFps;
+
+                    int remainingSleep = targetIntervalMs - (int)elapsedMs;
+                    if (remainingSleep > 1)
+                    {
+                        await Task.Delay(remainingSleep, ct);
+                    }
+                    else
+                    {
+                        await Task.Yield();
+                    }
                 }
                 catch (OperationCanceledException)
                 {
@@ -303,10 +323,54 @@ namespace RemoteDesktopServer.Network
                     if (!ct.IsCancellationRequested)
                     {
                         OnLog?.Invoke($"[Streaming Loop Error] {ex.Message}");
-                        await Task.Delay(500, ct);
+                        await Task.Delay(200, ct);
                     }
                 }
             }
+        }
+
+        private async Task MetricLoggerLoop(CancellationToken ct)
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(1000, ct);
+
+                    if (_clients.Count > 0)
+                    {
+                        int currentFps = Interlocked.Exchange(ref _framesDeliveredCounter, 0);
+                        _lastMeasuredFps = currentFps;
+                        double avgEncodeMs = _lastEncodeDurationMs;
+                        long avgLatency = GetAverageClientLatency();
+
+                        OnLog?.Invoke($"[Latency Monitor] Latency: {avgLatency} ms | FPS: {currentFps} | Encode: {avgEncodeMs:F1} ms | Clients: {_clients.Count}");
+                        OnMetricsUpdated?.Invoke(currentFps, avgLatency, avgEncodeMs);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private long GetAverageClientLatency()
+        {
+            long total = 0;
+            int count = 0;
+            foreach (var client in _clients.Values)
+            {
+                if (client.Connection.IsAvailable)
+                {
+                    total += Math.Max(1, client.LastReportedLatency);
+                    count++;
+                }
+            }
+            return count > 0 ? (total / count) : 1;
         }
 
         public void Stop()

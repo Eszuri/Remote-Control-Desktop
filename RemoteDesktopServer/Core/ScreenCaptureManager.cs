@@ -10,7 +10,7 @@ namespace RemoteDesktopServer.Core
 
         public int ScreenWidth => _capture?.ScreenWidth ?? 1920;
         public int ScreenHeight => _capture?.ScreenHeight ?? 1080;
-        public string ActiveCaptureMethod => _usingDxgi ? "DirectX DXGI" : "Win32 GDI";
+        public string ActiveCaptureMethod => _usingDxgi ? "DirectX DXGI (GPU)" : "Win32 GDI";
 
         public ScreenCaptureManager()
         {
@@ -30,9 +30,9 @@ namespace RemoteDesktopServer.Core
             if (!success)
             {
                 _consecutiveFailures++;
-                if (_consecutiveFailures > 10 && _usingDxgi)
+                // Only switch if DXGI has persistently failed more than 30 consecutive times
+                if (_consecutiveFailures > 30 && _usingDxgi)
                 {
-                    // Switch to GDI fallback
                     _capture.Dispose();
                     _capture = new GdiScreenCapture();
                     _capture.Initialize();
