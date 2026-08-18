@@ -1,0 +1,49 @@
+# Built application files
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+
+# Gradle build cache & output
+.gradle/
+build/
+app/build/
+**/build/
+.gradletasknamecache
+
+# Local configuration file (contains SDK/NDK paths, sensitive keys)
+local.properties
+
+# Android Studio & IntelliJ IDEA files
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+.idea/deploymentTargetDropDown.xml
+.idea/deploymentTargetSelector.xml
+.idea/deviceManager.xml
+.idea/compiler.xml
+*.iml
+.cxx/
+
+# Android Studio profiling / capture files
+captures/
+.externalNativeBuild/
+
+# Keystore files (NEVER commit signing keys)
+*.jks
+*.keystore
+
+# Log files
+*.log
+
+# OS-generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store

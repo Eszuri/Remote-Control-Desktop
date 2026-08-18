@@ -1,0 +1,80 @@
+# ==========================================
+# Root .gitignore - Remote Control Desktop
+# Full-Stack: Android Client (Kotlin) & Windows Server (.NET/WPF)
+# ==========================================
+
+# ------------------------------------------
+# .NET / C# / Visual Studio (RemoteDesktopServer)
+# ------------------------------------------
+**/[Bb]in/
+**/[Oo]bj/
+**/publish/
+**/out/
+.vs/
+*.user
+*.userosv
+*.suo
+*.userprefs
+*.sln.docstates
+*.sln.subprojects
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# ------------------------------------------
+# Android / Kotlin / Gradle (RemoteDesktopClient)
+# ------------------------------------------
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+.gradle/
+**/build/
+.gradletasknamecache
+local.properties
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+.idea/deploymentTargetDropDown.xml
+.idea/deploymentTargetSelector.xml
+.idea/deviceManager.xml
+.idea/compiler.xml
+*.iml
+.cxx/
+captures/
+.externalNativeBuild/
+*.jks
+*.keystore
+
+# ------------------------------------------
+# General Editors & IDEs
+# ------------------------------------------
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# ------------------------------------------
+# Logs, Dumps & Temp Files
+# ------------------------------------------
+*.log
+*.dump
+*.dmp
+*.crash
+*.tmp
+*.temp
+
+# ------------------------------------------
+# Operating System Files
+# ------------------------------------------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
