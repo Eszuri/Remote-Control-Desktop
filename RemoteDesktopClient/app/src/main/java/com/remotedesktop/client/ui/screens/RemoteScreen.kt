@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -27,16 +28,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerInputChange
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,7 +53,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.roundToInt
+
+private const val MIN_ZOOM = 1.0f
+private const val MAX_ZOOM = 3.0f
 
 @Composable
 fun RemoteScreen(
@@ -62,37 +70,91 @@ fun RemoteScreen(
     val serverInfo by viewModel.serverInfo.collectAsState()
 
     var showControls by remember { mutableStateOf(false) }
-    var showKeyboardInput by remember { mutableStateOf(false) }
-    var keyboardText by remember { mutableStateOf("") }
-    val focusRequester = remember { FocusRequester() }
+    var isKeyboardOpen by remember { mutableStateOf(false) }
+
+    val keyboardFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    var directInputValue by remember { mutableStateOf(TextFieldValue("")) }
+
+    var zoomScale by remember { mutableStateOf(1f) }
+    var panOffset by remember { mutableStateOf(Offset.Zero) }
+    var viewportSize by remember { mutableStateOf(IntSize.Zero) }
+
+    val latestZoomScale = rememberUpdatedState(zoomScale)
+    val latestPanOffset = rememberUpdatedState(panOffset)
+    val latestViewportSize = rememberUpdatedState(viewportSize)
+    val applyTransform = rememberUpdatedState { nextScale: Float, nextPan: Offset ->
+        zoomScale = nextScale
+        panOffset = nextPan
+    }
+
+    val context = LocalContext.current
+    val viewConfig = remember(context) { ViewConfiguration.get(context) }
+    val touchSlop = viewConfig.scaledTouchSlop.toFloat()
+    val doubleTapTimeout = ViewConfiguration.getDoubleTapTimeout().toLong()
+    val longPressTimeout = ViewConfiguration.getLongPressTimeout().toLong()
+
+    fun toggleKeyboard() {
+        if (isKeyboardOpen) {
+            keyboardController?.hide()
+            isKeyboardOpen = false
+        } else {
+            isKeyboardOpen = true
+            keyboardFocusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
+            .onSizeChanged { size ->
+                viewportSize = size
+                panOffset = clampPanOffset(zoomScale, panOffset, size)
+            }
     ) {
-        val context = LocalContext.current
-        var zoomScale by remember { mutableFloatStateOf(MIN_ZOOM) }
-        var panOffset by remember { mutableStateOf(Offset.Zero) }
-        var viewportSize by remember { mutableStateOf(IntSize.Zero) }
-        val latestZoomScale = rememberUpdatedState(zoomScale)
-        val latestPanOffset = rememberUpdatedState(panOffset)
-        val latestViewportSize = rememberUpdatedState(viewportSize)
-        val applyTransform = rememberUpdatedState<(Float, Offset) -> Unit> { scale, offset ->
-            zoomScale = scale
-            panOffset = offset
-        }
-        val touchSlop = remember(context) { ViewConfiguration.get(context).scaledTouchSlop }
-        val longPressTimeout = remember { ViewConfiguration.getLongPressTimeout().toLong() }
-        val doubleTapTimeout = remember { ViewConfiguration.getDoubleTapTimeout().toLong() }
+        // Direct Hidden Soft Keyboard Input (Streams typed characters & backspaces instantly to PC)
+        BasicTextField(
+            value = directInputValue,
+            onValueChange = { newValue ->
+                val oldText = directInputValue.text
+                val newText = newValue.text
+                if (newText.length > oldText.length) {
+                    val addedText = newText.substring(oldText.length)
+                    viewModel.sendTextInput(addedText)
+                } else if (newText.length < oldText.length) {
+                    val diff = oldText.length - newText.length
+                    repeat(diff) {
+                        viewModel.sendShortcut("backspace")
+                    }
+                }
+                if (newText.length > 40) {
+                    directInputValue = TextFieldValue("")
+                } else {
+                    directInputValue = newValue
+                }
+            },
+            keyboardOptions = KeyboardOptions(
+                imeAction = ImeAction.Default,
+                autoCorrect = false
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = { viewModel.sendShortcut("enter") },
+                onGo = { viewModel.sendShortcut("enter") },
+                onSearch = { viewModel.sendShortcut("enter") },
+                onSend = { viewModel.sendShortcut("enter") }
+            ),
+            modifier = Modifier
+                .size(1.dp)
+                .alpha(0.01f)
+                .focusRequester(keyboardFocusRequester)
+        )
 
+        // Hardware-Accelerated Zero-Latency SurfaceView Screen with Pinch-to-Zoom & Pan
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .onSizeChanged { size ->
-                    viewportSize = size
-                    panOffset = clampPanOffset(zoomScale, panOffset, size)
-                }
                 .pointerInput(touchMode) {
                     coroutineScope {
                         var pendingTapJob: Job? = null
@@ -111,6 +173,7 @@ fun RemoteScreen(
                             var gesturePan = latestPanOffset.value
                             var previousCentroid = Offset.Unspecified
                             var previousDistance = 0f
+                            var transformStarted = false
                             var pointerReleased = false
 
                             val longPressJob = launch {
@@ -144,13 +207,24 @@ fun RemoteScreen(
                                     } else {
                                         val centroid = activePointers.centroid()
                                         val distance = activePointers.distance()
+                                        val centroidDelta = centroid - previousCentroid
+                                        val distanceDelta = abs(distance - previousDistance)
+
+                                        if (!transformStarted &&
+                                            centroidDelta.getDistance() <= touchSlop &&
+                                            distanceDelta <= touchSlop
+                                        ) {
+                                            event.changes.forEach { it.consume() }
+                                            continue
+                                        }
+
+                                        transformStarted = true
                                         val zoomChange = if (previousDistance > 0f) {
                                             (distance / previousDistance).coerceIn(0.85f, 1.18f)
                                         } else {
                                             1f
                                         }
                                         val nextScale = (gestureScale * zoomChange).coerceIn(MIN_ZOOM, MAX_ZOOM)
-                                        val centroidDelta = centroid - previousCentroid
                                         val scaleRatio = nextScale / gestureScale
                                         val nextPan = centroid - (centroid - gesturePan) * scaleRatio + centroidDelta
                                         gestureScale = nextScale
@@ -267,26 +341,52 @@ fun RemoteScreen(
             )
         }
 
-        // Single Floating Toggle Button (Controls Hide / Unhide)
-        Surface(
-            color = if (showControls) PrimaryBlue.copy(alpha = 0.9f) else CardBg.copy(alpha = 0.4f),
-            shape = CircleShape,
-            border = BorderStroke(1.dp, if (showControls) PrimaryBlue else Color(0x55334155)),
+        // Top-Right Floating Controls: [Keyboard Toggle] & [Settings / UI Toggle]
+        Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(top = 16.dp, end = 16.dp)
-                .size(40.dp)
+                .padding(top = 16.dp, end = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(
-                onClick = { showControls = !showControls },
-                modifier = Modifier.fillMaxSize()
+            // 1. Direct Keyboard Trigger (Hide / Unhide Soft Keyboard)
+            Surface(
+                color = if (isKeyboardOpen) PrimaryBlue.copy(alpha = 0.95f) else CardBg.copy(alpha = 0.6f),
+                shape = CircleShape,
+                border = BorderStroke(1.dp, if (isKeyboardOpen) PrimaryBlue else Color(0x55334155)),
+                modifier = Modifier.size(40.dp)
             ) {
-                Icon(
-                    imageVector = if (showControls) Icons.Default.Fullscreen else Icons.Default.Tune,
-                    contentDescription = if (showControls) "Hide Controls" else "Show Controls",
-                    tint = if (showControls) Color.Black else Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
+                IconButton(
+                    onClick = { toggleKeyboard() },
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Keyboard,
+                        contentDescription = if (isKeyboardOpen) "Hide Keyboard" else "Show Keyboard",
+                        tint = if (isKeyboardOpen) Color.Black else Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            // 2. Settings / UI Trigger (Hide / Unhide All Controls HUD & Shortcuts)
+            Surface(
+                color = if (showControls) PrimaryBlue.copy(alpha = 0.95f) else CardBg.copy(alpha = 0.6f),
+                shape = CircleShape,
+                border = BorderStroke(1.dp, if (showControls) PrimaryBlue else Color(0x55334155)),
+                modifier = Modifier.size(40.dp)
+            ) {
+                IconButton(
+                    onClick = { showControls = !showControls },
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Icon(
+                        imageVector = if (showControls) Icons.Default.Fullscreen else Icons.Default.Tune,
+                        contentDescription = if (showControls) "Hide Settings" else "Show Settings",
+                        tint = if (showControls) Color.Black else Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
 
@@ -372,60 +472,6 @@ fun RemoteScreen(
             }
         }
 
-        // Pop-up Virtual Keyboard Text Input Dialog
-        if (showKeyboardInput) {
-            LaunchedEffect(Unit) {
-                focusRequester.requestFocus()
-            }
-
-            Surface(
-                color = CardBg,
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color(0xFF334155)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-                    .align(Alignment.Center)
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = keyboardText,
-                        onValueChange = { keyboardText = it },
-                        placeholder = { Text("Type text to send to PC...") },
-                        singleLine = true,
-                        modifier = Modifier
-                            .weight(1f)
-                            .focusRequester(focusRequester),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                        keyboardActions = KeyboardActions(onSend = {
-                            if (keyboardText.isNotEmpty()) {
-                                viewModel.sendTextInput(keyboardText)
-                                keyboardText = ""
-                            }
-                        })
-                    )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Button(
-                        onClick = {
-                            if (keyboardText.isNotEmpty()) {
-                                viewModel.sendTextInput(keyboardText)
-                                keyboardText = ""
-                            }
-                            showKeyboardInput = false
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
-                    ) {
-                        Text("Send", color = Color.Black, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
         // Bottom Controls Overlay (Animated Visibility when showControls is true)
         AnimatedVisibility(
             visible = showControls,
@@ -484,10 +530,14 @@ fun RemoteScreen(
                         Spacer(modifier = Modifier.width(8.dp))
 
                         IconButton(
-                            onClick = { showKeyboardInput = !showKeyboardInput },
+                            onClick = { toggleKeyboard() },
                             modifier = Modifier.size(44.dp)
                         ) {
-                            Icon(Icons.Default.Keyboard, contentDescription = "Keyboard", tint = PrimaryBlue)
+                            Icon(
+                                imageVector = Icons.Default.Keyboard,
+                                contentDescription = "Keyboard",
+                                tint = if (isKeyboardOpen) PrimaryBlue else TextPrimary
+                            )
                         }
 
                         IconButton(
@@ -521,54 +571,54 @@ fun RemoteScreen(
     }
 }
 
-private const val MIN_ZOOM = 1f
-private const val MAX_ZOOM = 8f
+private fun clampPanOffset(scale: Float, offset: Offset, size: IntSize): Offset {
+    if (size.width <= 0 || size.height <= 0 || scale <= 1f) {
+        return Offset.Zero
+    }
 
-private fun List<PointerInputChange>.centroid(): Offset {
-    if (isEmpty()) return Offset.Zero
-    return Offset(
-        sumOf { it.position.x.toDouble() }.toFloat() / size,
-        sumOf { it.position.y.toDouble() }.toFloat() / size
-    )
-}
-
-private fun List<PointerInputChange>.distance(): Float {
-    if (size < 2) return 0f
-    return (this[0].position - this[1].position).getDistance()
-}
-
-private fun clampPanOffset(scale: Float, offset: Offset, viewportSize: IntSize): Offset {
-    if (viewportSize.width <= 0 || viewportSize.height <= 0) return Offset.Zero
-
-    val scaledWidth = viewportSize.width * scale
-    val scaledHeight = viewportSize.height * scale
-    val minX = minOf(0f, viewportSize.width - scaledWidth)
-    val minY = minOf(0f, viewportSize.height - scaledHeight)
+    val maxPanX = (size.width * (scale - 1f)) / 2f
+    val maxPanY = (size.height * (scale - 1f)) / 2f
 
     return Offset(
-        offset.x.coerceIn(minX, 0f),
-        offset.y.coerceIn(minY, 0f)
+        x = offset.x.coerceIn(-maxPanX, maxPanX),
+        y = offset.y.coerceIn(-maxPanY, maxPanY)
     )
 }
 
 private fun sendAbsolutePointer(
-    position: Offset,
-    zoomScale: Float,
-    panOffset: Offset,
+    screenPosition: Offset,
+    scale: Float,
+    pan: Offset,
     viewportSize: IntSize,
     viewModel: RemoteViewModel
 ) {
     if (viewportSize.width <= 0 || viewportSize.height <= 0) return
 
-    val contentX = ((position.x - panOffset.x) / zoomScale)
-        .coerceIn(0f, viewportSize.width.toFloat())
-    val contentY = ((position.y - panOffset.y) / zoomScale)
-        .coerceIn(0f, viewportSize.height.toFloat())
+    val contentX = (screenPosition.x - viewportSize.width / 2f - pan.x) / scale + viewportSize.width / 2f
+    val contentY = (screenPosition.y - viewportSize.height / 2f - pan.y) / scale + viewportSize.height / 2f
 
-    viewModel.sendMouseMoveAbsolute(
-        (contentX / viewportSize.width).toDouble(),
-        (contentY / viewportSize.height).toDouble()
-    )
+    val normX = (contentX / viewportSize.width.toFloat()).toDouble().coerceIn(0.0, 1.0)
+    val normY = (contentY / viewportSize.height.toFloat()).toDouble().coerceIn(0.0, 1.0)
+
+    viewModel.sendMouseMoveAbsolute(normX, normY)
+}
+
+private fun List<PointerInputChange>.centroid(): Offset {
+    if (isEmpty()) return Offset.Unspecified
+    var sumX = 0f
+    var sumY = 0f
+    forEach {
+        sumX += it.position.x
+        sumY += it.position.y
+    }
+    return Offset(sumX / size, sumY / size)
+}
+
+private fun List<PointerInputChange>.distance(): Float {
+    if (size < 2) return 0f
+    val first = this[0].position
+    val second = this[1].position
+    return (first - second).getDistance()
 }
 
 @Composable
@@ -579,10 +629,17 @@ private fun DirectSurfaceRenderer(
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
+    var surfaceViewRef by remember { mutableStateOf<FastStreamSurfaceView?>(null) }
+
+    LaunchedEffect(zoomScale, panOffset) {
+        surfaceViewRef?.updateTransform(zoomScale, panOffset)
+    }
 
     AndroidView(
         factory = { context ->
             FastStreamSurfaceView(context).apply {
+                surfaceViewRef = this
+                updateTransform(zoomScale, panOffset)
                 coroutineScope.launch(Dispatchers.Default) {
                     viewModel.wsManager.frameFlow.collect { bitmap ->
                         renderBitmap(bitmap)
@@ -590,25 +647,19 @@ private fun DirectSurfaceRenderer(
                 }
             }
         },
-        update = { surfaceView ->
-            surfaceView.setDisplayTransform(zoomScale, panOffset)
+        update = { surface ->
+            surface.updateTransform(zoomScale, panOffset)
         },
         modifier = modifier
     )
 }
 
-private data class DisplayTransform(
-    val scale: Float = MIN_ZOOM,
-    val offset: Offset = Offset.Zero
-)
-
 private class FastStreamSurfaceView(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG)
     private val destRect = Rect()
-    private val renderLock = Any()
-    @Volatile private var isSurfaceReady = false
-    @Volatile private var displayTransform = DisplayTransform()
-    @Volatile private var latestBitmap: Bitmap? = null
+    private var isSurfaceReady = false
+    private var zoomScale = 1f
+    private var panOffset = Offset.Zero
 
     init {
         holder.addCallback(this)
@@ -616,49 +667,23 @@ private class FastStreamSurfaceView(context: Context) : SurfaceView(context), Su
 
     override fun surfaceCreated(holder: SurfaceHolder) {
         isSurfaceReady = true
-        post { redrawLatestFrame() }
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        synchronized(renderLock) {
-            destRect.set(0, 0, width, height)
-        }
-        post { redrawLatestFrame() }
+        destRect.set(0, 0, width, height)
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         isSurfaceReady = false
     }
 
-    fun setDisplayTransform(scale: Float, offset: Offset) {
-        displayTransform = DisplayTransform(
-            scale = scale.coerceIn(MIN_ZOOM, MAX_ZOOM),
-            offset = offset
-        )
-        post { redrawLatestFrame() }
+    fun updateTransform(scale: Float, pan: Offset) {
+        zoomScale = scale
+        panOffset = pan
     }
 
     fun renderBitmap(bitmap: Bitmap) {
-        if (bitmap.isRecycled) return
-
-        synchronized(renderLock) {
-            latestBitmap = bitmap
-            drawBitmap(bitmap)
-        }
-    }
-
-    private fun redrawLatestFrame() {
-        synchronized(renderLock) {
-            latestBitmap?.let { bitmap ->
-                if (!bitmap.isRecycled) {
-                    drawBitmap(bitmap)
-                }
-            }
-        }
-    }
-
-    private fun drawBitmap(bitmap: Bitmap) {
-        if (!isSurfaceReady || bitmap.isRecycled || destRect.isEmpty) return
+        if (!isSurfaceReady || bitmap.isRecycled) return
 
         try {
             val canvas = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -669,13 +694,16 @@ private class FastStreamSurfaceView(context: Context) : SurfaceView(context), Su
 
             if (canvas != null) {
                 try {
-                    val transform = displayTransform
-                    val savedState = canvas.save()
-                    canvas.drawColor(android.graphics.Color.BLACK)
-                    canvas.translate(transform.offset.x, transform.offset.y)
-                    canvas.scale(transform.scale, transform.scale)
+                    canvas.save()
+                    if (zoomScale > 1f || panOffset != Offset.Zero) {
+                        val centerX = width / 2f
+                        val centerY = height / 2f
+                        canvas.translate(centerX + panOffset.x, centerY + panOffset.y)
+                        canvas.scale(zoomScale, zoomScale)
+                        canvas.translate(-centerX, -centerY)
+                    }
                     canvas.drawBitmap(bitmap, null, destRect, paint)
-                    canvas.restoreToCount(savedState)
+                    canvas.restore()
                 } finally {
                     holder.unlockCanvasAndPost(canvas)
                 }
