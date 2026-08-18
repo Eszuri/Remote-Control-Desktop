@@ -1,5 +1,6 @@
 package com.remotedesktop.client
 
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -7,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -40,6 +42,15 @@ class MainActivity : ComponentActivity() {
                     color = DarkBg
                 ) {
                     val connectionState by viewModel.connectionState.collectAsState()
+
+                    // Auto-rotate to Sensor Landscape (Landscape bolak-balik) when connected, restore to Unspecified when disconnected
+                    LaunchedEffect(connectionState) {
+                        requestedOrientation = if (connectionState == ConnectionState.CONNECTED) {
+                            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                        } else {
+                            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                        }
+                    }
 
                     if (connectionState == ConnectionState.CONNECTED) {
                         RemoteScreen(viewModel = viewModel)

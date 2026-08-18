@@ -7,12 +7,13 @@ import android.graphics.Rect
 import android.os.Build
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import android.view.ViewConfiguration
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -28,11 +29,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -40,6 +45,9 @@ import com.remotedesktop.client.data.TouchMode
 import com.remotedesktop.client.ui.theme.*
 import com.remotedesktop.client.viewmodel.RemoteViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -63,60 +71,201 @@ fun RemoteScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // Hardware-Accelerated Zero-Latency SurfaceView Screen
-        DirectSurfaceRenderer(
-            viewModel = viewModel,
+        val context = LocalContext.current
+        var zoomScale by remember { mutableFloatStateOf(MIN_ZOOM) }
+        var panOffset by remember { mutableStateOf(Offset.Zero) }
+        var viewportSize by remember { mutableStateOf(IntSize.Zero) }
+        val latestZoomScale = rememberUpdatedState(zoomScale)
+        val latestPanOffset = rememberUpdatedState(panOffset)
+        val latestViewportSize = rememberUpdatedState(viewportSize)
+        val applyTransform = rememberUpdatedState<(Float, Offset) -> Unit> { scale, offset ->
+            zoomScale = scale
+            panOffset = offset
+        }
+        val touchSlop = remember(context) { ViewConfiguration.get(context).scaledTouchSlop }
+        val longPressTimeout = remember { ViewConfiguration.getLongPressTimeout().toLong() }
+        val doubleTapTimeout = remember { ViewConfiguration.getDoubleTapTimeout().toLong() }
+
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(touchMode) {
-                    detectTapGestures(
-                        onTap = { offset ->
-                            if (touchMode == TouchMode.DIRECT_TOUCH) {
-                                val normX = (offset.x / size.width.toFloat()).toDouble().coerceIn(0.0, 1.0)
-                                val normY = (offset.y / size.height.toFloat()).toDouble().coerceIn(0.0, 1.0)
-                                viewModel.sendMouseMoveAbsolute(normX, normY)
-                                viewModel.sendMouseClick("left", "click")
-                            } else {
-                                viewModel.sendMouseClick("left", "click")
-                            }
-                        },
-                        onDoubleTap = { offset ->
-                            if (touchMode == TouchMode.DIRECT_TOUCH) {
-                                val normX = (offset.x / size.width.toFloat()).toDouble().coerceIn(0.0, 1.0)
-                                val normY = (offset.y / size.height.toFloat()).toDouble().coerceIn(0.0, 1.0)
-                                viewModel.sendMouseMoveAbsolute(normX, normY)
-                                viewModel.sendMouseClick("left", "dblclick")
-                            } else {
-                                viewModel.sendMouseClick("left", "dblclick")
-                            }
-                        },
-                        onLongPress = { offset ->
-                            if (touchMode == TouchMode.DIRECT_TOUCH) {
-                                val normX = (offset.x / size.width.toFloat()).toDouble().coerceIn(0.0, 1.0)
-                                val normY = (offset.y / size.height.toFloat()).toDouble().coerceIn(0.0, 1.0)
-                                viewModel.sendMouseMoveAbsolute(normX, normY)
-                                viewModel.sendMouseClick("right", "click")
-                            } else {
-                                viewModel.sendMouseClick("right", "click")
-                            }
-                        }
-                    )
+                .onSizeChanged { size ->
+                    viewportSize = size
+                    panOffset = clampPanOffset(zoomScale, panOffset, size)
                 }
                 .pointerInput(touchMode) {
-                    detectDragGestures { change, dragAmount ->
-                        change.consume()
-                        if (touchMode == TouchMode.TRACKPAD) {
-                            val dx = (dragAmount.x * 1.5f).roundToInt()
-                            val dy = (dragAmount.y * 1.5f).roundToInt()
-                            viewModel.sendMouseMoveDelta(dx, dy)
-                        } else {
-                            val normX = (change.position.x / size.width.toFloat()).toDouble().coerceIn(0.0, 1.0)
-                            val normY = (change.position.y / size.height.toFloat()).toDouble().coerceIn(0.0, 1.0)
-                            viewModel.sendMouseMoveAbsolute(normX, normY)
+                    coroutineScope {
+                        var pendingTapJob: Job? = null
+                        var lastTapTime = 0L
+                        var lastTapPosition = Offset.Unspecified
+
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            val firstPointerId = down.id
+                            val initialPosition = down.position
+                            var lastPosition = down.position
+                            var isDragged = false
+                            var isMultiTouch = false
+                            var longPressTriggered = false
+                            var gestureScale = latestZoomScale.value
+                            var gesturePan = latestPanOffset.value
+                            var previousCentroid = Offset.Unspecified
+                            var previousDistance = 0f
+                            var pointerReleased = false
+
+                            val longPressJob = launch {
+                                delay(longPressTimeout)
+                                if (!isDragged && !isMultiTouch && !pointerReleased) {
+                                    longPressTriggered = true
+                                    if (touchMode == TouchMode.DIRECT_TOUCH) {
+                                        sendAbsolutePointer(
+                                            initialPosition,
+                                            gestureScale,
+                                            gesturePan,
+                                            latestViewportSize.value,
+                                            viewModel
+                                        )
+                                    }
+                                    viewModel.sendMouseClick("right", "click")
+                                }
+                            }
+
+                            while (!pointerReleased) {
+                                val event = awaitPointerEvent()
+                                val activePointers = event.changes.filter { it.pressed }
+
+                                if (activePointers.size >= 2) {
+                                    if (!isMultiTouch) {
+                                        isMultiTouch = true
+                                        longPressJob.cancel()
+                                        isDragged = true
+                                        previousCentroid = activePointers.centroid()
+                                        previousDistance = activePointers.distance()
+                                    } else {
+                                        val centroid = activePointers.centroid()
+                                        val distance = activePointers.distance()
+                                        val zoomChange = if (previousDistance > 0f) {
+                                            (distance / previousDistance).coerceIn(0.85f, 1.18f)
+                                        } else {
+                                            1f
+                                        }
+                                        val nextScale = (gestureScale * zoomChange).coerceIn(MIN_ZOOM, MAX_ZOOM)
+                                        val centroidDelta = centroid - previousCentroid
+                                        val scaleRatio = nextScale / gestureScale
+                                        val nextPan = centroid - (centroid - gesturePan) * scaleRatio + centroidDelta
+                                        gestureScale = nextScale
+                                        gesturePan = clampPanOffset(
+                                            nextScale,
+                                            nextPan,
+                                            latestViewportSize.value
+                                        )
+                                        applyTransform.value(gestureScale, gesturePan)
+                                        previousCentroid = centroid
+                                        previousDistance = distance
+                                    }
+
+                                    event.changes.forEach { it.consume() }
+                                    continue
+                                }
+
+                                if (isMultiTouch) {
+                                    event.changes.forEach { it.consume() }
+                                    if (activePointers.isEmpty()) {
+                                        pointerReleased = true
+                                    }
+                                    continue
+                                }
+
+                                val pointerChange = event.changes.firstOrNull { it.id == firstPointerId }
+                                if (pointerChange == null) {
+                                    pointerReleased = true
+                                    continue
+                                }
+
+                                val currentPosition = pointerChange.position
+                                val movement = currentPosition - lastPosition
+                                if (pointerChange.pressed) {
+                                    if (!isDragged && (currentPosition - initialPosition).getDistance() > touchSlop) {
+                                        isDragged = true
+                                        longPressJob.cancel()
+                                    }
+
+                                    if (isDragged && movement != Offset.Zero) {
+                                        pointerChange.consume()
+                                        if (touchMode == TouchMode.TRACKPAD) {
+                                            viewModel.sendMouseMoveDelta(
+                                                (movement.x * 1.5f).roundToInt(),
+                                                (movement.y * 1.5f).roundToInt()
+                                            )
+                                        } else {
+                                            sendAbsolutePointer(
+                                                currentPosition,
+                                                gestureScale,
+                                                gesturePan,
+                                                latestViewportSize.value,
+                                                viewModel
+                                            )
+                                        }
+                                    }
+                                    lastPosition = currentPosition
+                                } else {
+                                    pointerReleased = true
+                                    longPressJob.cancel()
+                                    pointerChange.consume()
+                                    if (!isDragged && !longPressTriggered) {
+                                        val now = System.currentTimeMillis()
+                                        val isDoubleTap = lastTapTime > 0L &&
+                                            now - lastTapTime <= doubleTapTimeout &&
+                                            lastTapPosition != Offset.Unspecified &&
+                                            (currentPosition - lastTapPosition).getDistance() <= touchSlop * 2f
+
+                                        pendingTapJob?.cancel()
+                                        if (isDoubleTap) {
+                                            if (touchMode == TouchMode.DIRECT_TOUCH) {
+                                                sendAbsolutePointer(
+                                                    currentPosition,
+                                                    gestureScale,
+                                                    gesturePan,
+                                                    latestViewportSize.value,
+                                                    viewModel
+                                                )
+                                            }
+                                            viewModel.sendMouseClick("left", "dblclick")
+                                            lastTapTime = 0L
+                                            lastTapPosition = Offset.Unspecified
+                                        } else {
+                                            lastTapTime = now
+                                            lastTapPosition = currentPosition
+                                            pendingTapJob = launch {
+                                                delay(doubleTapTimeout)
+                                                if (touchMode == TouchMode.DIRECT_TOUCH) {
+                                                    sendAbsolutePointer(
+                                                        currentPosition,
+                                                        gestureScale,
+                                                        gesturePan,
+                                                        latestViewportSize.value,
+                                                        viewModel
+                                                    )
+                                                }
+                                                viewModel.sendMouseClick("left", "click")
+                                                lastTapTime = 0L
+                                                lastTapPosition = Offset.Unspecified
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-        )
+        ) {
+            DirectSurfaceRenderer(
+                viewModel = viewModel,
+                zoomScale = zoomScale,
+                panOffset = panOffset,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         // Single Floating Toggle Button (Controls Hide / Unhide)
         Surface(
@@ -372,9 +521,61 @@ fun RemoteScreen(
     }
 }
 
+private const val MIN_ZOOM = 1f
+private const val MAX_ZOOM = 8f
+
+private fun List<PointerInputChange>.centroid(): Offset {
+    if (isEmpty()) return Offset.Zero
+    return Offset(
+        sumOf { it.position.x.toDouble() }.toFloat() / size,
+        sumOf { it.position.y.toDouble() }.toFloat() / size
+    )
+}
+
+private fun List<PointerInputChange>.distance(): Float {
+    if (size < 2) return 0f
+    return (this[0].position - this[1].position).getDistance()
+}
+
+private fun clampPanOffset(scale: Float, offset: Offset, viewportSize: IntSize): Offset {
+    if (viewportSize.width <= 0 || viewportSize.height <= 0) return Offset.Zero
+
+    val scaledWidth = viewportSize.width * scale
+    val scaledHeight = viewportSize.height * scale
+    val minX = minOf(0f, viewportSize.width - scaledWidth)
+    val minY = minOf(0f, viewportSize.height - scaledHeight)
+
+    return Offset(
+        offset.x.coerceIn(minX, 0f),
+        offset.y.coerceIn(minY, 0f)
+    )
+}
+
+private fun sendAbsolutePointer(
+    position: Offset,
+    zoomScale: Float,
+    panOffset: Offset,
+    viewportSize: IntSize,
+    viewModel: RemoteViewModel
+) {
+    if (viewportSize.width <= 0 || viewportSize.height <= 0) return
+
+    val contentX = ((position.x - panOffset.x) / zoomScale)
+        .coerceIn(0f, viewportSize.width.toFloat())
+    val contentY = ((position.y - panOffset.y) / zoomScale)
+        .coerceIn(0f, viewportSize.height.toFloat())
+
+    viewModel.sendMouseMoveAbsolute(
+        (contentX / viewportSize.width).toDouble(),
+        (contentY / viewportSize.height).toDouble()
+    )
+}
+
 @Composable
 private fun DirectSurfaceRenderer(
     viewModel: RemoteViewModel,
+    zoomScale: Float,
+    panOffset: Offset,
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -389,14 +590,25 @@ private fun DirectSurfaceRenderer(
                 }
             }
         },
+        update = { surfaceView ->
+            surfaceView.setDisplayTransform(zoomScale, panOffset)
+        },
         modifier = modifier
     )
 }
 
+private data class DisplayTransform(
+    val scale: Float = MIN_ZOOM,
+    val offset: Offset = Offset.Zero
+)
+
 private class FastStreamSurfaceView(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG)
     private val destRect = Rect()
-    private var isSurfaceReady = false
+    private val renderLock = Any()
+    @Volatile private var isSurfaceReady = false
+    @Volatile private var displayTransform = DisplayTransform()
+    @Volatile private var latestBitmap: Bitmap? = null
 
     init {
         holder.addCallback(this)
@@ -404,18 +616,49 @@ private class FastStreamSurfaceView(context: Context) : SurfaceView(context), Su
 
     override fun surfaceCreated(holder: SurfaceHolder) {
         isSurfaceReady = true
+        post { redrawLatestFrame() }
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        destRect.set(0, 0, width, height)
+        synchronized(renderLock) {
+            destRect.set(0, 0, width, height)
+        }
+        post { redrawLatestFrame() }
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         isSurfaceReady = false
     }
 
+    fun setDisplayTransform(scale: Float, offset: Offset) {
+        displayTransform = DisplayTransform(
+            scale = scale.coerceIn(MIN_ZOOM, MAX_ZOOM),
+            offset = offset
+        )
+        post { redrawLatestFrame() }
+    }
+
     fun renderBitmap(bitmap: Bitmap) {
-        if (!isSurfaceReady || bitmap.isRecycled) return
+        if (bitmap.isRecycled) return
+
+        synchronized(renderLock) {
+            latestBitmap = bitmap
+            drawBitmap(bitmap)
+        }
+    }
+
+    private fun redrawLatestFrame() {
+        synchronized(renderLock) {
+            latestBitmap?.let { bitmap ->
+                if (!bitmap.isRecycled) {
+                    drawBitmap(bitmap)
+                }
+            }
+        }
+    }
+
+    private fun drawBitmap(bitmap: Bitmap) {
+        if (!isSurfaceReady || bitmap.isRecycled || destRect.isEmpty) return
 
         try {
             val canvas = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -426,7 +669,13 @@ private class FastStreamSurfaceView(context: Context) : SurfaceView(context), Su
 
             if (canvas != null) {
                 try {
+                    val transform = displayTransform
+                    val savedState = canvas.save()
+                    canvas.drawColor(android.graphics.Color.BLACK)
+                    canvas.translate(transform.offset.x, transform.offset.y)
+                    canvas.scale(transform.scale, transform.scale)
                     canvas.drawBitmap(bitmap, null, destRect, paint)
+                    canvas.restoreToCount(savedState)
                 } finally {
                     holder.unlockCanvasAndPost(canvas)
                 }

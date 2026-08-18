@@ -3,10 +3,6 @@ package com.remotedesktop.client.viewmodel
 import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
-import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -54,9 +50,6 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     private val _quality = MutableStateFlow(prefs.getInt("pref_quality", 70))
     val quality: StateFlow<Int> = _quality.asStateFlow()
 
-    private val _hapticEnabled = MutableStateFlow(prefs.getBoolean("pref_haptic", true))
-    val hapticEnabled: StateFlow<Boolean> = _hapticEnabled.asStateFlow()
-
     private var frameCounter = 0
     private var lastFpsTimestamp = System.currentTimeMillis()
     private val _measuredFps = MutableStateFlow(0)
@@ -91,11 +84,6 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     fun setTouchMode(mode: TouchMode) {
         _touchMode.value = mode
         prefs.edit().putString("pref_touch_mode", mode.name).apply()
-    }
-
-    fun toggleHaptic(enabled: Boolean) {
-        _hapticEnabled.value = enabled
-        prefs.edit().putBoolean("pref_haptic", enabled).apply()
     }
 
     fun connect() {
@@ -134,7 +122,6 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun sendMouseClick(button: String = "left", action: String = "click") {
-        vibrateFeedback()
         wsManager.send(ClientMessage(type = "mouse_click", button = button, action = action))
     }
 
@@ -143,7 +130,6 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun sendKeyEvent(code: Int, action: String = "press") {
-        vibrateFeedback()
         wsManager.send(ClientMessage(type = "key_event", code = code, action = action))
     }
 
@@ -154,7 +140,6 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun sendShortcut(shortcutName: String) {
-        vibrateFeedback()
         wsManager.send(ClientMessage(type = "shortcut", name = shortcutName))
     }
 
@@ -168,24 +153,4 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         wsManager.send(ClientMessage(type = "quality_change", quality = q, fps = f, scale = scale))
     }
 
-    private fun vibrateFeedback() {
-        if (!_hapticEnabled.value) return
-        try {
-            val context = getApplication<Application>()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vibratorManager?.defaultVibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
-            } else {
-                @Suppress("DEPRECATION")
-                val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator?.vibrate(VibrationEffect.createOneShot(20, VibrationEffect.DEFAULT_AMPLITUDE))
-                } else {
-                    @Suppress("DEPRECATION")
-                    vibrator?.vibrate(20)
-                }
-            }
-        } catch (e: Exception) {
-        }
-    }
 }
