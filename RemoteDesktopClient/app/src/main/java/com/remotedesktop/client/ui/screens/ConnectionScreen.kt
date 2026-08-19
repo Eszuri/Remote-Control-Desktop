@@ -172,29 +172,14 @@ fun ConnectionScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Connection Details",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = TextPrimary
-                    )
+                Text(
+                    text = "Connection Details",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextPrimary
+                )
 
-                    TextButton(
-                        onClick = { showQrScanner = true },
-                        contentPadding = PaddingValues(0.dp)
-                    ) {
-                        Icon(Icons.Default.CameraAlt, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(15.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Camera Scan", color = PrimaryBlue, fontSize = 12.sp)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Row(modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
