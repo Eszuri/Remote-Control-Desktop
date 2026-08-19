@@ -113,32 +113,53 @@ fun ConnectionScreen(
             }
         }
 
-        // Error message banner
+        // Disconnection & Error message banner
         if (errorMessage != null) {
             Surface(
-                color = ErrorRed.copy(alpha = 0.15f),
-                shape = RoundedCornerShape(10.dp),
-                border = BorderStroke(1.dp, ErrorRed),
+                color = ErrorRed.copy(alpha = 0.18f),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, ErrorRed.copy(alpha = 0.6f)),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 16.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Default.ErrorOutline,
+                        imageVector = Icons.Default.WarningAmber,
                         contentDescription = null,
                         tint = ErrorRed,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(24.dp)
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = errorMessage ?: "",
-                        color = ErrorRed,
-                        fontSize = 13.sp
-                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Koneksi Terputus",
+                            color = ErrorRed,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = errorMessage ?: "",
+                            color = TextPrimary,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+                    }
+                    IconButton(
+                        onClick = { viewModel.clearErrorMessage() },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Tutup",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
         }

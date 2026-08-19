@@ -108,6 +108,10 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         _currentFrame.value = null
     }
 
+    fun clearErrorMessage() {
+        wsManager.clearError()
+    }
+
     fun searchServers() {
         discoveryManager.startDiscovery()
     }

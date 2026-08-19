@@ -33,7 +33,7 @@ class WebSocketManager(
 ) {
     private val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
-        .pingInterval(10, TimeUnit.SECONDS)
+        .pingInterval(5, TimeUnit.SECONDS)
         .build()
 
     private val json = Json {
@@ -44,6 +44,8 @@ class WebSocketManager(
 
     private var webSocket: WebSocket? = null
     private var pingJob: Job? = null
+    @Volatile
+    private var lastMessageTimestamp = 0L
 
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
@@ -71,6 +73,7 @@ class WebSocketManager(
 
         _connectionState.value = ConnectionState.CONNECTING
         _errorMessage.value = null
+        lastMessageTimestamp = System.currentTimeMillis()
 
         val request = Request.Builder()
             .url(wsUrl)
@@ -78,12 +81,14 @@ class WebSocketManager(
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                lastMessageTimestamp = System.currentTimeMillis()
                 _connectionState.value = ConnectionState.CONNECTED
                 sendDirect(ClientMessage(type = "auth"))
                 startPingLoop()
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                lastMessageTimestamp = System.currentTimeMillis()
                 try {
                     val res = json.decodeFromString<ServerResponse>(text)
                     when (res.type) {
@@ -92,9 +97,14 @@ class WebSocketManager(
                                 _connectionState.value = ConnectionState.CONNECTED
                                 _serverInfo.value = res
                             } else {
-                                _connectionState.value = ConnectionState.ERROR
-                                _errorMessage.value = res.message ?: "Connection rejected"
+                                _errorMessage.value = res.message ?: "Koneksi ditolak oleh server"
+                                disconnect(forcedReason = _errorMessage.value)
                             }
+                        }
+                        "server_stopped" -> {
+                            val msg = res.message ?: "Server remote telah dimatikan dari sisi PC host."
+                            _errorMessage.value = msg
+                            disconnect(forcedReason = msg)
                         }
                         "pong" -> {
                             val now = System.currentTimeMillis()
@@ -108,6 +118,7 @@ class WebSocketManager(
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+                lastMessageTimestamp = System.currentTimeMillis()
                 val data = bytes.toByteArray()
                 if (data.size > 9 && data[0] == 0x53.toByte()) { // 'S' header
                     try {
@@ -122,18 +133,27 @@ class WebSocketManager(
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                val msg = if (reason.isNotBlank() && reason != "User disconnected") reason else "Server terputus dari sisi PC host."
+                if (_errorMessage.value == null) {
+                    _errorMessage.value = msg
+                }
                 _connectionState.value = ConnectionState.DISCONNECTED
                 stopPingLoop()
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                val msg = if (reason.isNotBlank() && reason != "User disconnected") reason else "Server terputus dari sisi PC host."
+                if (_errorMessage.value == null) {
+                    _errorMessage.value = msg
+                }
                 _connectionState.value = ConnectionState.DISCONNECTED
                 stopPingLoop()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                val msg = if (_errorMessage.value != null) _errorMessage.value else "Koneksi terputus: Server PC host tidak aktif atau jaringan terputus."
+                _errorMessage.value = msg
                 _connectionState.value = ConnectionState.ERROR
-                _errorMessage.value = t.localizedMessage ?: "Connection failed"
                 stopPingLoop()
             }
         })
@@ -141,13 +161,26 @@ class WebSocketManager(
 
     private fun startPingLoop() {
         stopPingLoop()
+        lastMessageTimestamp = System.currentTimeMillis()
+
         pingJob = scope.launch(Dispatchers.IO) {
             while (isActive) {
                 delay(1000)
                 if (_connectionState.value == ConnectionState.CONNECTED) {
+                    val now = System.currentTimeMillis()
+
+                    // Watchdog: If no response/frame received from server for > 3.5 seconds, trigger disconnect immediately
+                    if (now - lastMessageTimestamp > 3500) {
+                        Log.w("RemoteDesktop", "Watchdog: Server unresponsive for >3.5s. Disconnecting.")
+                        val msg = "Koneksi terputus: Server PC host tidak merespons."
+                        _errorMessage.value = msg
+                        disconnect(forcedReason = msg)
+                        break
+                    }
+
                     val pingMsg = ClientMessage(
                         type = "ping",
-                        timestamp = System.currentTimeMillis(),
+                        timestamp = now,
                         clientLatency = _measuredLatency.value
                     )
                     sendDirect(pingMsg)
@@ -174,10 +207,14 @@ class WebSocketManager(
         sendDirect(message)
     }
 
-    fun disconnect() {
+    fun clearError() {
+        _errorMessage.value = null
+    }
+
+    fun disconnect(forcedReason: String? = null) {
         stopPingLoop()
         try {
-            webSocket?.close(1000, "User disconnected")
+            webSocket?.close(1000, forcedReason ?: "User disconnected")
             webSocket = null
         } catch (e: Exception) {
         }

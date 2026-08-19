@@ -376,6 +376,29 @@ namespace RemoteDesktopServer.Network
         public void Stop()
         {
             _streamingCts?.Cancel();
+
+            foreach (var client in _clients.Values)
+            {
+                try
+                {
+                    if (client.Connection.IsAvailable)
+                    {
+                        var stopResponse = new ServerResponse
+                        {
+                            Type = "server_stopped",
+                            Success = false,
+                            Message = "Server remote telah dimatikan dari sisi PC host.",
+                            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                        };
+                        client.Connection.Send(JsonSerializer.Serialize(stopResponse));
+                        client.Connection.Close();
+                    }
+                }
+                catch
+                {
+                }
+            }
+
             _server?.Dispose();
             _server = null;
             _captureManager?.Dispose();
