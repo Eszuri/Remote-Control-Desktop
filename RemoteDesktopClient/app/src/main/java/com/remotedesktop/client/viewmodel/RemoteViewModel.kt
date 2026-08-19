@@ -44,6 +44,9 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     private val _port = MutableStateFlow(prefs.getString("pref_port", "9090") ?: "9090")
     val port: StateFlow<String> = _port.asStateFlow()
 
+    private val _mouseSensitivity = MutableStateFlow(prefs.getFloat("pref_sensitivity", 1.5f))
+    val mouseSensitivity: StateFlow<Float> = _mouseSensitivity.asStateFlow()
+
     private val _fps = MutableStateFlow(prefs.getInt("pref_fps", 60))
     val fps: StateFlow<Int> = _fps.asStateFlow()
 
@@ -84,6 +87,12 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     fun setTouchMode(mode: TouchMode) {
         _touchMode.value = mode
         prefs.edit().putString("pref_touch_mode", mode.name).apply()
+    }
+
+    fun setMouseSensitivity(sensitivity: Float) {
+        val clamped = sensitivity.coerceIn(0.5f, 4.0f)
+        _mouseSensitivity.value = clamped
+        prefs.edit().putFloat("pref_sensitivity", clamped).apply()
     }
 
     fun connect() {
@@ -156,5 +165,4 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
             .apply()
         wsManager.send(ClientMessage(type = "quality_change", quality = q, fps = f, scale = scale))
     }
-
 }

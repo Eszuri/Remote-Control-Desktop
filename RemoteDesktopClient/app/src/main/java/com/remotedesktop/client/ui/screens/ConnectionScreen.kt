@@ -231,7 +231,49 @@ fun ConnectionScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                val mouseSensitivity by viewModel.mouseSensitivity.collectAsState()
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp, bottom = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Speed, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Cursor Sensitivity",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextSecondary
+                        )
+                    }
+                    Text(
+                        text = "${String.format(java.util.Locale.US, "%.1f", mouseSensitivity)}x",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryBlue
+                    )
+                }
+
+                Slider(
+                    value = mouseSensitivity,
+                    onValueChange = { viewModel.setMouseSensitivity(it) },
+                    valueRange = 0.5f..3.5f,
+                    steps = 11,
+                    colors = SliderDefaults.colors(
+                        thumbColor = PrimaryBlue,
+                        activeTrackColor = PrimaryBlue,
+                        inactiveTrackColor = Color(0xFF334155)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(30.dp)
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Button(
                     onClick = { viewModel.connect() },

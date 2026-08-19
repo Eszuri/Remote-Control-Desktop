@@ -65,6 +65,7 @@ fun RemoteScreen(
     modifier: Modifier = Modifier
 ) {
     val touchMode by viewModel.touchMode.collectAsState()
+    val mouseSensitivity by viewModel.mouseSensitivity.collectAsState()
     val measuredFps by viewModel.measuredFps.collectAsState()
     val measuredLatency by viewModel.measuredLatency.collectAsState()
     val serverInfo by viewModel.serverInfo.collectAsState()
@@ -298,8 +299,8 @@ fun RemoteScreen(
                                         pointerChange.consume()
                                         if (touchMode == TouchMode.TRACKPAD) {
                                             viewModel.sendMouseMoveDelta(
-                                                (movement.x * 1.5f).roundToInt(),
-                                                (movement.y * 1.5f).roundToInt()
+                                                (movement.x * mouseSensitivity).roundToInt(),
+                                                (movement.y * mouseSensitivity).roundToInt()
                                             )
                                         } else {
                                             sendAbsolutePointer(
@@ -476,6 +477,46 @@ fun RemoteScreen(
                             contentDescription = "Toggle Mode",
                             tint = PrimaryBlue,
                             modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Sensitivity Quick-Cycle Button
+                Surface(
+                    color = CardBg.copy(alpha = 0.9f),
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, Color(0xFF334155))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .clickable {
+                                val nextSens = when {
+                                    mouseSensitivity < 1.0f -> 1.0f
+                                    mouseSensitivity < 1.5f -> 1.5f
+                                    mouseSensitivity < 2.0f -> 2.0f
+                                    mouseSensitivity < 2.5f -> 2.5f
+                                    mouseSensitivity < 3.0f -> 3.0f
+                                    else -> 0.75f
+                                }
+                                viewModel.setMouseSensitivity(nextSens)
+                            }
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Speed,
+                            contentDescription = "Sensitivity",
+                            tint = PrimaryBlue,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "${String.format(java.util.Locale.US, "%.1f", mouseSensitivity)}x",
+                            color = TextPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
