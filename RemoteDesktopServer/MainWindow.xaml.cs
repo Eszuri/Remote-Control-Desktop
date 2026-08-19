@@ -52,6 +52,12 @@ namespace RemoteDesktopServer
             if (TxtFpsVal != null) TxtFpsVal.Text = $"{settings.Fps} FPS";
             if (TxtQualityVal != null) TxtQualityVal.Text = $"{settings.Quality}%";
 
+            bool isStartup = StartupManager.IsStartupEnabled();
+            if (ChkLaunchStartup != null)
+            {
+                ChkLaunchStartup.IsChecked = isStartup;
+            }
+
             string localIp = RemoteWebSocketServer.GetLocalIPAddress();
             TxtIpAddress.Text = localIp;
             UpdateQrCode();
@@ -495,6 +501,22 @@ namespace RemoteDesktopServer
             }
         }
 
+        private void ChkLaunchStartup_Click(object sender, RoutedEventArgs e)
+        {
+            bool enable = ChkLaunchStartup.IsChecked == true;
+            bool success = StartupManager.SetStartup(enable);
+            if (success)
+            {
+                AppendLog($"[System] Launch on Windows Startup set to {(enable ? "ENABLED" : "DISABLED")}");
+                SaveCurrentSettings();
+            }
+            else
+            {
+                ChkLaunchStartup.IsChecked = !enable;
+                AppendLog("[System Error] Failed to update Windows startup registry.");
+            }
+        }
+
         private void SaveCurrentSettings()
         {
             try
@@ -503,7 +525,8 @@ namespace RemoteDesktopServer
                 {
                     Port = TryGetValidPort(out int p) ? p : 9090,
                     Fps = (int)SliderFps.Value,
-                    Quality = (int)SliderQuality.Value
+                    Quality = (int)SliderQuality.Value,
+                    LaunchOnStartup = ChkLaunchStartup?.IsChecked == true
                 };
                 settings.Save();
             }

@@ -1,9 +1,5 @@
 package com.remotedesktop.client.ui.components
 
-import android.Manifest
-import android.content.pm.PackageManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -21,7 +17,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,28 +35,11 @@ import java.util.concurrent.Executors
 
 @Composable
 fun QrScannerDialog(
+    hasCameraPermission: Boolean,
+    onRequestCamera: () -> Unit,
     onDismiss: () -> Unit,
     onQrScanned: (ip: String, port: String) -> Unit
 ) {
-    val context = LocalContext.current
-    var hasCameraPermission by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-        )
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = { granted ->
-            hasCameraPermission = granted
-        }
-    )
-
-    LaunchedEffect(Unit) {
-        if (!hasCameraPermission) {
-            permissionLauncher.launch(Manifest.permission.CAMERA)
-        }
-    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -134,7 +112,7 @@ fun QrScannerDialog(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
-                        onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+                        onClick = onRequestCamera,
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                     ) {
                         Text("Grant Permission", color = Color.Black)
@@ -150,7 +128,6 @@ fun QrScannerDialog(
 private fun CameraPreviewView(
     onBarcodeDetected: (String) -> Unit
 ) {
-    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var isScanned by remember { mutableStateOf(false) }
 

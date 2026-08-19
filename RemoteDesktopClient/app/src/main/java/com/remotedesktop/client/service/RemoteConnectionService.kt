@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import com.remotedesktop.client.MainActivity
 
 class RemoteConnectionService : Service {
@@ -68,6 +69,11 @@ class RemoteConnectionService : Service {
         }
 
         val serverInfo = intent?.getStringExtra(EXTRA_SERVER_INFO) ?: "PC Host"
+        if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) {
+            stopForegroundService()
+            return START_NOT_STICKY
+        }
+
         val notification = buildNotification(serverInfo)
 
         try {

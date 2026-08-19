@@ -269,6 +269,44 @@
                                 AutomationProperties.HelpText="Choose JPEG quality between 20 and 95 percent."
                                 ToolTip="JPEG quality: 20 to 95 percent"
                                 TabIndex="5" />
+
+                        <Separator Background="{StaticResource BrushBorder}" Margin="0,16,0,14" />
+
+                        <TextBlock Text="System preferences"
+                                   Style="{StaticResource SectionTitleStyle}"
+                                   Margin="0,0,0,10" />
+
+                        <Border Background="{StaticResource BrushSurfaceRaised}"
+                                BorderBrush="{StaticResource BrushBorder}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="12,10"
+                                Margin="0,0,0,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Launch on Windows Startup"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource BrushTextPrimary}" />
+                                    <TextBlock Text="Run server automatically on boot"
+                                               FontSize="11"
+                                               Foreground="{StaticResource BrushTextMuted}"
+                                               Margin="0,2,0,0" />
+                                </StackPanel>
+                                <CheckBox x:Name="ChkLaunchStartup"
+                                          Grid.Column="1"
+                                          Style="{StaticResource ToggleSwitchStyle}"
+                                          VerticalAlignment="Center"
+                                          Click="ChkLaunchStartup_Click"
+                                          AutomationProperties.Name="Launch on Windows Startup switch"
+                                          ToolTip="Start server automatically when Windows boots up"
+                                          TabIndex="6" />
+                            </Grid>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </Border>

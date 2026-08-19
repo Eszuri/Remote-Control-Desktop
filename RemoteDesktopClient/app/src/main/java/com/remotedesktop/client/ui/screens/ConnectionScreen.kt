@@ -20,6 +20,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.remotedesktop.client.data.ConnectionState
+import com.remotedesktop.client.data.PermissionState
+import com.remotedesktop.client.ui.components.PermissionCenter
 import com.remotedesktop.client.ui.components.QrScannerDialog
 import com.remotedesktop.client.ui.theme.*
 import com.remotedesktop.client.viewmodel.RemoteViewModel
@@ -27,6 +29,12 @@ import com.remotedesktop.client.viewmodel.RemoteViewModel
 @Composable
 fun ConnectionScreen(
     viewModel: RemoteViewModel,
+    permissionState: PermissionState,
+    onRequestNotifications: () -> Unit,
+    onOpenNotificationSettings: () -> Unit,
+    onRequestCamera: () -> Unit,
+    onOpenOverlaySettings: () -> Unit,
+    onRefreshPermissions: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val ip by viewModel.ipAddress.collectAsState()
@@ -38,13 +46,27 @@ fun ConnectionScreen(
 
     var showQrScanner by remember { mutableStateOf(false) }
 
+    val connectIfAllowed: () -> Unit = {
+        if (permissionState.requiredGranted) {
+            viewModel.connect()
+        } else {
+            onRequestNotifications()
+        }
+    }
+
     if (showQrScanner) {
         QrScannerDialog(
+            hasCameraPermission = permissionState.cameraGranted,
+            onRequestCamera = onRequestCamera,
             onDismiss = { showQrScanner = false },
             onQrScanned = { scannedIp, scannedPort ->
                 viewModel.setIp(scannedIp)
                 viewModel.setPort(scannedPort)
-                viewModel.connect()
+                if (permissionState.requiredGranted) {
+                    viewModel.connect()
+                } else {
+                    onRequestNotifications()
+                }
             }
         )
     }
@@ -112,6 +134,16 @@ fun ConnectionScreen(
                 Text("Scan QR", color = PrimaryBlue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
         }
+
+        PermissionCenter(
+            state = permissionState,
+            onRequestNotifications = onRequestNotifications,
+            onOpenNotificationSettings = onOpenNotificationSettings,
+            onRequestCamera = onRequestCamera,
+            onOpenOverlaySettings = onOpenOverlaySettings,
+            onRefresh = onRefreshPermissions,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
 
         // Disconnection & Error message banner
         if (errorMessage != null) {
@@ -261,7 +293,7 @@ fun ConnectionScreen(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 Button(
-                    onClick = { viewModel.connect() },
+                    onClick = connectIfAllowed,
                     enabled = connectionState != ConnectionState.CONNECTING,
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                     shape = RoundedCornerShape(10.dp),
@@ -379,7 +411,11 @@ fun ConnectionScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                viewModel.connectToDiscovered(server.ip, server.port)
+                                if (permissionState.requiredGranted) {
+                                    viewModel.connectToDiscovered(server.ip, server.port)
+                                } else {
+                                    onRequestNotifications()
+                                }
                             }
                     ) {
                         Row(
@@ -416,7 +452,13 @@ fun ConnectionScreen(
                             }
 
                             Button(
-                                onClick = { viewModel.connectToDiscovered(server.ip, server.port) },
+                                onClick = {
+                                    if (permissionState.requiredGranted) {
+                                        viewModel.connectToDiscovered(server.ip, server.port)
+                                    } else {
+                                        onRequestNotifications()
+                                    }
+                                },
                                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                                 shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)

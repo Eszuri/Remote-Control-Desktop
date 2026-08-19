@@ -9,6 +9,7 @@ namespace RemoteDesktopServer.Core
         public int Port { get; set; } = 9090;
         public int Fps { get; set; } = 30;
         public int Quality { get; set; } = 70;
+        public bool LaunchOnStartup { get; set; } = false;
 
         private static string SettingsFilePath =>
             Path.Combine(
