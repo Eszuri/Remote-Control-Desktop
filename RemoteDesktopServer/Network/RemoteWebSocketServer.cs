@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
@@ -20,6 +21,7 @@ namespace RemoteDesktopServer.Network
         public double ScaleFactor { get; set; } = 1.0;
         public int TargetFps { get; set; } = 60;
         public long LastReportedLatency { get; set; } = 1;
+        public string RemoteEndpoint { get; set; } = string.Empty;
     }
 
     public class RemoteWebSocketServer : IDisposable
@@ -44,7 +46,7 @@ namespace RemoteDesktopServer.Network
         public event Action<int>? OnClientCountChanged;
         public event Action<int, long, double>? OnMetricsUpdated; // fps, latencyMs, encodeMs
 
-        public int ConnectedClientCount => _clients.Count;
+        public int ConnectedClientCount => _clients.Values.Count(c => c.Connection.IsAvailable);
         public string CaptureMethod => _captureManager?.ActiveCaptureMethod ?? "DirectX DXGI (GPU)";
 
         public RemoteWebSocketServer(int port)
@@ -66,27 +68,27 @@ namespace RemoteDesktopServer.Network
                 {
                     socket.OnOpen = () =>
                     {
+                        var endpoint = $"{socket.ConnectionInfo.ClientIpAddress}:{socket.ConnectionInfo.ClientPort}";
                         var session = new ClientSession
                         {
                             Connection = socket,
                             IsAuthenticated = true,
                             TargetFps = DefaultFps,
                             TargetQuality = DefaultQuality,
-                            ScaleFactor = DefaultScale
+                            ScaleFactor = DefaultScale,
+                            RemoteEndpoint = endpoint
                         };
 
                         _clients[socket.ConnectionInfo.Id] = session;
-                        OnLog?.Invoke($"[Client Connected] {socket.ConnectionInfo.ClientIpAddress}:{socket.ConnectionInfo.ClientPort}");
-                        OnClientCountChanged?.Invoke(_clients.Count);
+                        OnLog?.Invoke($"[Client Connected] {endpoint}");
+                        OnClientCountChanged?.Invoke(ConnectedClientCount);
 
                         SendAuthResult(socket, true, "Connected successfully");
                     };
 
                     socket.OnClose = () =>
                     {
-                        _clients.TryRemove(socket.ConnectionInfo.Id, out _);
-                        OnLog?.Invoke($"[Client Disconnected] {socket.ConnectionInfo.ClientIpAddress}:{socket.ConnectionInfo.ClientPort}");
-                        OnClientCountChanged?.Invoke(_clients.Count);
+                        RemoveClient(socket.ConnectionInfo.Id, "Disconnected");
                     };
 
                     socket.OnMessage = message =>
@@ -99,7 +101,7 @@ namespace RemoteDesktopServer.Network
 
                     socket.OnError = ex =>
                     {
-                        OnLog?.Invoke($"[Client Error] {socket.ConnectionInfo.ClientIpAddress}: {ex.Message}");
+                        RemoveClient(socket.ConnectionInfo.Id, "Disconnected (Error)");
                     };
                 });
 
@@ -112,6 +114,15 @@ namespace RemoteDesktopServer.Network
             catch (Exception ex)
             {
                 OnLog?.Invoke($"[Server Start Error] {ex.Message}");
+            }
+        }
+
+        private void RemoveClient(Guid socketId, string reason)
+        {
+            if (_clients.TryRemove(socketId, out var session))
+            {
+                OnLog?.Invoke($"[Client {reason}] {session.RemoteEndpoint}");
+                OnClientCountChanged?.Invoke(ConnectedClientCount);
             }
         }
 
@@ -240,14 +251,17 @@ namespace RemoteDesktopServer.Network
                 {
                     stopwatch.Restart();
 
-                    int activeClients = 0;
-                    foreach (var s in _clients.Values)
+                    // Clean up any stale sockets
+                    var activeSessions = _clients.Values.Where(s => s.Connection.IsAvailable).ToList();
+
+                    if (activeSessions.Count == 0)
                     {
-                        if (s.Connection.IsAvailable)
-                            activeClients++;
+                        // No active clients connected: sleep gently without doing GPU/CPU capture
+                        await Task.Delay(100, ct);
+                        continue;
                     }
 
-                    if (activeClients > 0 && _captureManager != null)
+                    if (_captureManager != null)
                     {
                         int quality = DefaultQuality;
                         double scale = DefaultScale;
@@ -283,9 +297,8 @@ namespace RemoteDesktopServer.Network
 
                             Buffer.BlockCopy(frame.Data, 0, packet, 9, frame.Data.Length);
 
-                            foreach (var pair in _clients)
+                            foreach (var client in activeSessions)
                             {
-                                var client = pair.Value;
                                 if (client.Connection.IsAvailable)
                                 {
                                     try
@@ -294,7 +307,12 @@ namespace RemoteDesktopServer.Network
                                     }
                                     catch
                                     {
+                                        RemoveClient(client.Connection.ConnectionInfo.Id, "Disconnected");
                                     }
+                                }
+                                else
+                                {
+                                    RemoveClient(client.Connection.ConnectionInfo.Id, "Disconnected");
                                 }
                             }
                         }
@@ -337,14 +355,24 @@ namespace RemoteDesktopServer.Network
                 {
                     await Task.Delay(1000, ct);
 
-                    if (_clients.Count > 0)
+                    // Clean up any dead connections
+                    foreach (var pair in _clients.ToList())
+                    {
+                        if (!pair.Value.Connection.IsAvailable)
+                        {
+                            RemoveClient(pair.Key, "Disconnected");
+                        }
+                    }
+
+                    int activeCount = ConnectedClientCount;
+                    if (activeCount > 0)
                     {
                         int currentFps = Interlocked.Exchange(ref _framesDeliveredCounter, 0);
                         _lastMeasuredFps = currentFps;
                         double avgEncodeMs = _lastEncodeDurationMs;
                         long avgLatency = GetAverageClientLatency();
 
-                        OnLog?.Invoke($"[Latency Monitor] Latency: {avgLatency} ms | FPS: {currentFps} | Encode: {avgEncodeMs:F1} ms | Clients: {_clients.Count}");
+                        OnLog?.Invoke($"[Latency Monitor] Latency: {avgLatency} ms | FPS: {currentFps} | Encode: {avgEncodeMs:F1} ms | Clients: {activeCount}");
                         OnMetricsUpdated?.Invoke(currentFps, avgLatency, avgEncodeMs);
                     }
                 }
