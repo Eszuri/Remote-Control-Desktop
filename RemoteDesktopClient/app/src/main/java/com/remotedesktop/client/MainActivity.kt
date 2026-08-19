@@ -1,13 +1,16 @@
 package com.remotedesktop.client
 
 import android.Manifest
+import android.app.PictureInPictureParams
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Rational
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -39,6 +42,7 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: RemoteViewModel by viewModels()
     private var permissionState by mutableStateOf(PermissionState())
+    private var isInPipModeState by mutableStateOf(false)
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -71,16 +75,22 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val connectionState by viewModel.connectionState.collectAsState()
 
-                    LaunchedEffect(connectionState) {
-                        requestedOrientation = if (connectionState == ConnectionState.CONNECTED) {
-                            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                        } else {
-                            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    LaunchedEffect(connectionState, isInPipModeState) {
+                        if (!isInPipModeState) {
+                            requestedOrientation = if (connectionState == ConnectionState.CONNECTED) {
+                                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                            } else {
+                                ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                            }
                         }
                     }
 
                     if (connectionState == ConnectionState.CONNECTED) {
-                        RemoteScreen(viewModel = viewModel)
+                        RemoteScreen(
+                            viewModel = viewModel,
+                            isInPipMode = isInPipModeState,
+                            onEnterPip = { enterFloatingPipMode() }
+                        )
                     } else {
                         ConnectionScreen(
                             viewModel = viewModel,
@@ -97,6 +107,38 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    fun enterFloatingPipMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val serverInfo = viewModel.serverInfo.value
+                val width = serverInfo?.screenWidth ?: 16
+                val height = serverInfo?.screenHeight ?: 9
+                val rational = try {
+                    Rational(width.coerceAtLeast(1), height.coerceAtLeast(1))
+                } catch (e: Exception) {
+                    Rational(16, 9)
+                }
+
+                val params = PictureInPictureParams.Builder()
+                    .setAspectRatio(rational)
+                    .build()
+
+                enterPictureInPictureMode(params)
+            } catch (e: Exception) {
+                try {
+                    @Suppress("DEPRECATION")
+                    enterPictureInPictureMode()
+                } catch (e2: Exception) {
+                }
+            }
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        isInPipModeState = isInPictureInPictureMode
+    }
+
     override fun onResume() {
         super.onResume()
         refreshPermissionState()
@@ -104,7 +146,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) {
+        if (hasFocus && !isInPipModeState) {
             try {
                 val controller = WindowCompat.getInsetsController(window, window.decorView)
                 controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
