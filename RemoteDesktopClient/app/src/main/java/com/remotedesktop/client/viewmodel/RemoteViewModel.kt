@@ -11,6 +11,7 @@ import com.remotedesktop.client.data.ConnectionState
 import com.remotedesktop.client.data.TouchMode
 import com.remotedesktop.client.network.LanDiscoveryManager
 import com.remotedesktop.client.network.WebSocketManager
+import com.remotedesktop.client.service.RemoteConnectionService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -72,6 +73,18 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
         }
+
+        viewModelScope.launch {
+            connectionState.collect { state ->
+                val context = getApplication<Application>()
+                if (state == ConnectionState.CONNECTED) {
+                    val info = "${_ipAddress.value}:${_port.value}"
+                    RemoteConnectionService.startService(context, info)
+                } else if (state == ConnectionState.DISCONNECTED || state == ConnectionState.ERROR) {
+                    RemoteConnectionService.stopService(context)
+                }
+            }
+        }
     }
 
     fun setIp(ip: String) {
@@ -113,6 +126,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun disconnect() {
+        RemoteConnectionService.stopService(getApplication())
         wsManager.disconnect()
         _currentFrame.value = null
     }

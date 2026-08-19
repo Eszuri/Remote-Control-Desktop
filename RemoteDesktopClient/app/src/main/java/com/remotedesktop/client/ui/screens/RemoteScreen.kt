@@ -62,6 +62,8 @@ private const val MAX_ZOOM = 3.0f
 @Composable
 fun RemoteScreen(
     viewModel: RemoteViewModel,
+    isInPipMode: Boolean = false,
+    onEnterPip: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val touchMode by viewModel.touchMode.collectAsState()
@@ -372,62 +374,85 @@ fun RemoteScreen(
             )
         }
 
-        // Top-Right Floating Controls: [Keyboard Toggle] & [Settings / UI Toggle]
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 16.dp, end = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 1. Direct Keyboard Trigger (Hide / Unhide Soft Keyboard)
-            Surface(
-                color = if (isKeyboardOpen) PrimaryBlue.copy(alpha = 0.95f) else CardBg.copy(alpha = 0.6f),
-                shape = CircleShape,
-                border = BorderStroke(1.dp, if (isKeyboardOpen) PrimaryBlue else Color(0x55334155)),
-                modifier = Modifier.size(40.dp)
+        // Top-Right Floating Controls: [Keyboard Toggle], [Floating PiP], & [Settings / UI Toggle]
+        if (!isInPipMode) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 16.dp, end = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
-                    onClick = { toggleKeyboard() },
-                    modifier = Modifier.fillMaxSize()
+                // 1. Direct Keyboard Trigger (Hide / Unhide Soft Keyboard)
+                Surface(
+                    color = if (isKeyboardOpen) PrimaryBlue.copy(alpha = 0.95f) else CardBg.copy(alpha = 0.6f),
+                    shape = CircleShape,
+                    border = BorderStroke(1.dp, if (isKeyboardOpen) PrimaryBlue else Color(0x55334155)),
+                    modifier = Modifier.size(40.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Keyboard,
-                        contentDescription = if (isKeyboardOpen) "Hide Keyboard" else "Show Keyboard",
-                        tint = if (isKeyboardOpen) Color.Black else Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    IconButton(
+                        onClick = { toggleKeyboard() },
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Keyboard,
+                            contentDescription = if (isKeyboardOpen) "Hide Keyboard" else "Show Keyboard",
+                            tint = if (isKeyboardOpen) Color.Black else Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
-            }
 
-            // 2. Settings / UI Trigger (Hide / Unhide All Controls HUD & Shortcuts)
-            Surface(
-                color = if (showControls) PrimaryBlue.copy(alpha = 0.95f) else CardBg.copy(alpha = 0.6f),
-                shape = CircleShape,
-                border = BorderStroke(1.dp, if (showControls) PrimaryBlue else Color(0x55334155)),
-                modifier = Modifier.size(40.dp)
-            ) {
-                IconButton(
-                    onClick = { showControls = !showControls },
-                    modifier = Modifier.fillMaxSize()
+                // 2. Floating App (Picture-in-Picture) Trigger Button
+                Surface(
+                    color = CardBg.copy(alpha = 0.6f),
+                    shape = CircleShape,
+                    border = BorderStroke(1.dp, Color(0x55334155)),
+                    modifier = Modifier.size(40.dp)
                 ) {
-                    Icon(
-                        imageVector = if (showControls) Icons.Default.Fullscreen else Icons.Default.Tune,
-                        contentDescription = if (showControls) "Hide Settings" else "Show Settings",
-                        tint = if (showControls) Color.Black else Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    IconButton(
+                        onClick = { onEnterPip() },
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PictureInPictureAlt,
+                            contentDescription = "Float Window",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                // 3. Settings / UI Trigger (Hide / Unhide All Controls HUD & Shortcuts)
+                Surface(
+                    color = if (showControls) PrimaryBlue.copy(alpha = 0.95f) else CardBg.copy(alpha = 0.6f),
+                    shape = CircleShape,
+                    border = BorderStroke(1.dp, if (showControls) PrimaryBlue else Color(0x55334155)),
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    IconButton(
+                        onClick = { showControls = !showControls },
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Icon(
+                            imageVector = if (showControls) Icons.Default.Fullscreen else Icons.Default.Tune,
+                            contentDescription = if (showControls) "Hide Settings" else "Show Settings",
+                            tint = if (showControls) Color.Black else Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
 
         // Top HUD Overlay (Animated Visibility when showControls is true)
-        AnimatedVisibility(
-            visible = showControls,
-            enter = fadeIn() + slideInVertically(initialOffsetY = { -it }),
-            exit = fadeOut() + slideOutVertically(targetOffsetY = { -it }),
-            modifier = Modifier.align(Alignment.TopStart)
-        ) {
+        if (!isInPipMode) {
+            AnimatedVisibility(
+                visible = showControls,
+                enter = fadeIn() + slideInVertically(initialOffsetY = { -it }),
+                exit = fadeOut() + slideOutVertically(targetOffsetY = { -it }),
+                modifier = Modifier.align(Alignment.TopStart)
+            ) {
             Row(
                 modifier = Modifier
                     .padding(top = 16.dp, start = 16.dp),
@@ -542,14 +567,16 @@ fun RemoteScreen(
                 }
             }
         }
+    }
 
-        // Bottom Controls Overlay (Animated Visibility when showControls is true)
+    // Bottom Controls Overlay (Animated Visibility when showControls is true)
+    if (!isInPipMode) {
         AnimatedVisibility(
-            visible = showControls,
-            enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
-            exit = fadeOut() + slideOutVertically(targetOffsetY = { it }),
-            modifier = Modifier.align(Alignment.BottomCenter)
-        ) {
+                visible = showControls,
+                enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
+                exit = fadeOut() + slideOutVertically(targetOffsetY = { it }),
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 // Windows Shortcuts Chip Row
                 Row(
@@ -640,6 +667,7 @@ fun RemoteScreen(
             }
         }
     }
+}
 }
 
 private fun clampPanOffset(scale: Float, offset: Offset, size: IntSize): Offset {
