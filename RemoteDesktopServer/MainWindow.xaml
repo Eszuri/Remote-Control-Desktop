@@ -53,7 +53,8 @@
                                         CornerRadius="6"
                                         Padding="8,2"
                                         Margin="10,0,0,0"
-                                        VerticalAlignment="Center">
+                                        VerticalAlignment="Center"
+                                        ToolTip="Active Screen Capture Engine (DirectX DXGI GPU hardware acceleration with GDI auto-fallback)">
                                     <TextBlock x:Name="TxtCaptureEngine"
                                                Text="⚡ DirectX DXGI (GPU)"
                                                FontSize="11"
@@ -77,7 +78,8 @@
                     <Border x:Name="StatusBadge"
                             Style="{StaticResource StatusBadgeStyle}"
                             Margin="0,0,12,0"
-                            AutomationProperties.Name="Server status">
+                            AutomationProperties.Name="Server status"
+                            ToolTip="Current server connection status">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Ellipse x:Name="StatusIndicatorDot"
                                      Width="8"
@@ -98,7 +100,7 @@
                             Width="136"
                             Click="BtnToggleServer_Click"
                             AutomationProperties.Name="Start or stop server"
-                            ToolTip="Start or stop the WebSocket server"
+                            ToolTip="Start or stop the remote desktop WebSocket server"
                             TabIndex="3" />
                 </StackPanel>
             </Grid>
@@ -140,7 +142,7 @@
                                         HorizontalAlignment="Center"
                                         Cursor="Hand"
                                         MouseLeftButtonDown="BorderQrThumbnail_MouseLeftButtonDown"
-                                        ToolTip="Click to view enlarged QR code"
+                                        ToolTip="Click to view enlarged QR Code for easy scanning"
                                         Margin="0,0,0,12">
                                     <StackPanel HorizontalAlignment="Center">
                                         <Image x:Name="ImgQrCode"
@@ -176,7 +178,7 @@
                                             Style="{StaticResource SecondaryButtonStyle}"
                                             Margin="6,0,0,0"
                                             Click="BtnCopyIp_Click"
-                                            ToolTip="Copy server IP address"
+                                            ToolTip="Copy server IPv4 address to clipboard"
                                             TabIndex="2" />
                                 </Grid>
                                 <TextBlock x:Name="TxtCopyFeedback"
@@ -201,7 +203,7 @@
                                                  Text="9090"
                                                  LostFocus="TxtPort_LostFocus"
                                                  TextChanged="TxtPort_TextChanged"
-                                                 ToolTip="TCP Port for WebSocket connection"
+                                                 ToolTip="TCP Port for WebSocket connection (Default: 9090)"
                                                  TabIndex="0" />
                                         <TextBlock x:Name="TxtPortValidation"
                                                    Text=""
@@ -216,9 +218,10 @@
                                                 BorderThickness="1"
                                                 CornerRadius="8"
                                                 Height="36"
-                                                Padding="8,0">
+                                                Padding="8,0"
+                                                ToolTip="Number of Android mobile devices currently connected">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
-                                                <Ellipse Width="6" Height="6" Fill="{StaticResource BrushSuccess}" Margin="0,0,6,0" />
+                                                <Ellipse x:Name="ClientIndicatorDot" Width="7" Height="7" Fill="{StaticResource BrushSuccess}" Margin="0,0,6,0" />
                                                 <TextBlock x:Name="TxtClientCount"
                                                            Text="0 Devices"
                                                            FontSize="12"
@@ -234,7 +237,7 @@
                         <!-- Stream Performance Card -->
                         <Border Style="{StaticResource InnerCardStyle}" Margin="0,0,0,12">
                             <StackPanel>
-                                <TextBlock Text="Stream Performance" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,8" />
+                                <TextBlock Text="Stream Performance" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,10" />
 
                                 <!-- FPS Slider -->
                                 <DockPanel Margin="0,0,0,2">
@@ -251,12 +254,12 @@
                                         TickFrequency="5"
                                         IsSnapToTickEnabled="True"
                                         ValueChanged="SliderFps_ValueChanged"
-                                        ToolTip="Target frame rate (10 to 60 FPS)"
+                                        ToolTip="Target streaming frame rate (10 to 60 FPS)"
                                         TabIndex="4" />
 
                                 <!-- Quality Slider -->
                                 <DockPanel Margin="0,10,0,2">
-                                    <TextBlock Text="JPEG Quality" Style="{StaticResource FieldLabelStyle}" />
+                                    <TextBlock Text="Screen Quality" Style="{StaticResource FieldLabelStyle}" />
                                     <TextBlock x:Name="TxtQualityVal"
                                                Text="70%"
                                                Style="{StaticResource ValueTextStyle}"
@@ -269,7 +272,7 @@
                                         TickFrequency="5"
                                         IsSnapToTickEnabled="True"
                                         ValueChanged="SliderQuality_ValueChanged"
-                                        ToolTip="JPEG Compression Quality (20% to 95%)"
+                                        ToolTip="JPEG image compression quality (20% lower bandwidth to 95% ultra-sharp)"
                                         TabIndex="5" />
                             </StackPanel>
                         </Border>
@@ -296,7 +299,7 @@
                                           Style="{StaticResource ToggleSwitchStyle}"
                                           VerticalAlignment="Center"
                                           Click="ChkLaunchStartup_Click"
-                                          ToolTip="Start server automatically on Windows startup"
+                                          ToolTip="Automatically launch server in background system tray on Windows startup"
                                           TabIndex="6" />
                             </Grid>
                         </Border>
