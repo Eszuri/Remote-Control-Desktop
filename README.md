@@ -1,49 +1,73 @@
-# 🖥️📱 PC Remote Control Desktop (Full-Stack System)
+# 🖥️📱 PC Remote Control Desktop (Full-Stack System v1.2.0)
 
-Sistem *Remote Desktop Control* berperforma tinggi dan berlatensi ultra-rendah (*ultra-low latency*) yang menghubungkan **Smartphone Android (Client)** dengan **PC Windows (Server)** secara nirkabel melalui jaringan Wi-Fi lokal (LAN) maupun internet jarak jauh (WAN / VPN) secara instan tanpa PIN.
+[![Release](https://img.shields.io/badge/Release-v1.2.0-blue.svg)](https://github.com/)
+[![Windows Server](https://img.shields.io/badge/Server-WPF%20.NET%2010-0078D7.svg)](RemoteDesktopServer/)
+[![Android Client](https://img.shields.io/badge/Client-Kotlin%20Compose-3DDC84.svg)](RemoteDesktopClient/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+Sistem **Remote Desktop Control** berperforma tinggi dan berlatensi ultra-rendah (*ultra-low latency*) yang menghubungkan **Smartphone Android (Client)** dengan **PC Windows (Server)** secara nirkabel melalui jaringan Wi-Fi lokal (LAN) maupun internet jarak jauh (WAN / VPN) secara instan tanpa PIN.
 
 ---
 
-## 🌟 Ikhtisar Sistem
+## 🌟 Ikhtisar Arsitektur Sistem
 
-Proyek ini merupakan solusi *full-stack* independen tanpa ketergantungan pihak ketiga cloud (*self-hosted / zero-cloud dependency*):
+Proyek ini merupakan solusi *full-stack* independen tanpa ketergantungan server cloud pihak ketiga (*self-hosted / zero-cloud dependency*):
 
 ```
 +------------------------------------------------------------------------------------+
-|                                ARSITEKTUR SISTEM                                   |
+|                             ARSITEKTUR SISTEM v1.2.0                               |
 |                                                                                    |
-|  [ SMARTPHONE ANDROID ]                                 [ PC WINDOWS DESKTOP ]     |
-|  +---------------------+                               +-------------------------+ |
-|  | RemoteDesktopClient |                               |   RemoteDesktopServer   | |
-|  | (Jetpack Compose)   |                               |      (WPF / .NET 10)    | |
-|  |                     |        UDP Broadcast (9091)   |                         | |
-|  |  [LanDiscovery]     | ============================> | [UdpDiscoveryServer]    | |
-|  |  [CameraX QR Scan]  | <---------------------------- | [QRCoder Instant Pair]  | |
-|  |                     |                               |                         | |
-|  |                     |        WebSocket (TCP 9090)   |                         | |
-|  |  [OkHttp WS]        | ----------------------------> | [Fleck WebSocketServer] | |
-|  |                     |        JSON Input Commands    |            |            | |
-|  |  [Touch / Keyboard] | ----------------------------> | [Win32 SendInput API]   | |
-|  |                     |                               |            |            | |
-|  |  [RGB_565 Canvas]   | <============================ | [DXGI / GDI Capture]    | |
-|  |  (Immersive Sticky) |   Binary Screen Stream (JPEG) | (Vortice Direct3D11)    | |
-|  +---------------------+                               +-------------------------+ |
+|  [ SMARTPHONE ANDROID (Client) ]                        [ PC WINDOWS (Server) ]    |
+|  +-----------------------------+                       +-------------------------+ |
+|  | RemoteDesktopClient v1.2.0  |                       | RemoteDesktopServer     | |
+|  | (Jetpack Compose & Kotlin)  |                       | (WPF / .NET 10 Desktop) | |
+|  |                             | UDP Broadcast (9091)  |                         | |
+|  |  [LanDiscoveryManager]      | ====================> | [UdpDiscoveryServer]    | |
+|  |  [CameraX QR Scanner]       | <-------------------- | [QRCoder Dynamic Gen]   | |
+|  |                             |                       |                         | |
+|  |  [Foreground Service]       |                       | [System Tray & Startup] | |
+|  |  (24/7 WakeLock / WifiLock) |  WebSocket (TCP 9090) | (Run in Background)     | |
+|  |  [OkHttp WebSocket]         | <-------------------> | [Fleck WebSocketServer] | |
+|  |                             |                       |            |            | |
+|  |  [Touch / Delta Sensitivity]|  JSON Input Messages  |            v            | |
+|  |  [Direct Unicode Keyboard]  | --------------------> | [Win32 SendInput API]   | |
+|  |  [Picture-in-Picture (PiP)] |                       |                         | |
+|  |                             |  Binary Screen Stream | [DXGI GPU Duplication]  | |
+|  |  [Hardware-Accelerated      | <==================== | (Vortice Direct3D11)    | |
+|  |   RGB_565 Canvas Stream]    |   (0x53 Header+JPEG)  | [GDI BitBlt Fallback]   | |
+|  +-----------------------------+                       +-------------------------+ |
 +------------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 🚀 Fitur Unggulan
+## 🚀 Fitur Unggulan Sistem
 
-| Kategori | Fitur Server (Windows) | Fitur Klien (Android) |
-| :--- | :--- | :--- |
-| **Video Streaming** | DirectX DXGI GPU Duplication (Vortice) + GDI BitBlt fallback | Hardware Accelerated Canvas Drawing + Fast `RGB_565` Bitmap Decoder |
-| **Resolusi & FPS** | Dinamis 10–60 FPS & Kualitas JPEG 20–95% | Menampilkan indikator FPS real-time & status koneksi |
-| **Kendali Mouse** | P/Invoke Win32 `SendInput` (Absolute & Delta Relative) | Dual Mode: **Trackpad Mode** (Touchpad laptop) & **Direct Touch Mode** |
-| **Kendali Keyboard** | Full Unicode Text Injection (`KEYEVENTF_UNICODE`) | Pop-up Virtual Keyboard & IME Text Forwarding (mendukung emoji & simbol) |
-| **Pintasan Cepat** | Eksekusi otomatis shortcut Windows | Toolbar Pintasan: `Win+D`, `Alt+Tab`, `Ctrl+C`, `Ctrl+V`, `Ctrl+Z`, `Ctrl+A`, dll. |
-| **Konektivitas** | Fleck WebSocket Server (TCP 9090) & UDP Discovery (9091) | Pemindaian LAN otomatis & QR Code Camera Scanner (CameraX + ML Kit) |
-| **Kemudahan Akses** | Koneksi instan tanpa PIN (*Zero PIN configuration*) | Otomatis terhubung setelah scan QR atau klik daftar server LAN |
+### 🖥️ Di Sisi Server (Windows PC)
+1. **DirectX DXGI GPU Capture Engine:** Mengambil frame langsung dari VRAM kartu grafis dengan latensi sub-frame (< 10ms) dan konsumsi CPU minimal.
+2. **Auto-Recovery GDI Fallback:** Jika DXGI context terlepas (misal saat game fullscreen atau perubahan resolusi), server otomatis beralih ke GDI BitBlt dan melakukan pemulihan otomatis kembali ke DirectX.
+3. **Zero-Client Idle Sleep Mode:** Server otomatis menghentikan capture saat tidak ada klien yang terhubung (0 FPS / 0% CPU), dan seketika bangun saat klien terhubung.
+4. **Auto-Startup on Booting:** Dilengkapi opsi switch on/off untuk mendaftarkan server ke startup Windows (`HKCU\...\Run`) agar otomatis berjalan saat PC dinyalakan.
+5. **System Tray Integration:**
+   - Server dapat berjalan murni di background tanpa memunculkan jendela saat booting.
+   - Ikon baki sistem (*System Tray*) dengan tooltip IP & status real-time.
+   - Klik kiri pada tray icon untuk memunculkan jendela server; klik kanan untuk menu cepat (*Open*, *Toggle Server*, *Exit*).
+   - Menekan tombol close **(X)** tidak mematikan server, melainkan otomatis meminimalkan server ke system tray (*ShowInTaskbar = false*).
+6. **Simulasi Input Native Win32:**
+   - Emulasi trackpad presisi tinggi menggunakan koordinat delta.
+   - Injeksi teks dan simbol Unicode langsung (`KEYEVENTF_UNICODE`).
+   - Eksekusi instan pintasan Windows (`Win+D`, `Alt+Tab`, `Ctrl+C`, `Ctrl+V`, `Ctrl+Z`, `Ctrl+A`, dll.).
+7. **Pairing Instan Tanpa PIN:** QR Code dinamis kontras tinggi dengan fitur klik untuk memperbesar (*centered modal zoom*).
+
+### 📱 Di Sisi Client (Android Smartphone)
+1. **Auto-Rotate Layar:** Otomatis berputar ke mode landscape sensor (*bolak-balik*) saat terhubung, dan kembali ke mode portrait saat terputus.
+2. **Picture-in-Picture (PiP) Layar Mengambang:** Tekan tombol **`⧉`** di pojok kanan atas untuk seketika mengubah remote PC menjadi jendela mengambang di atas aplikasi Android lain.
+3. **Koneksi Latar Belakang 24/7 (Foreground Service):** Dilengkapi *Ongoing Notification*, `PARTIAL_WAKE_LOCK`, dan `WIFI_MODE_FULL_HIGH_PERF` sehingga koneksi tidak pernah putus meskipun Anda keluar dari aplikasi atau layar smartphone mati.
+4. **Ketik Langsung Real-time:** Mengetik langsung dari keyboard HP ke aplikasi PC tanpa perlu form input perantara. Dilengkapi tombol pemicu show/hide keyboard virtual di sebelah tombol setting.
+5. **Pengaturan Sensitivitas Kursor:** Slider pengaturan sensitivitas kursor (0.5x hingga 4.0x) pada menu koneksi dan tombol *quick-cycle preset* (0.75x ➡️ 1.0x ➡️ 1.5x ➡️ 2.0x ➡️ 2.5x ➡️ 3.0x) pada toolbar remote.
+6. **Deteksi Terputus & Watchdog Anti-Stuck:** Deteksi instan saat server berhenti atau jaringan putus (heartbeat timeout 3.5 detik), otomatis keluar dari mode remote ke layar utama dengan notifikasi peringatan.
+7. **Pusat Izin Lipat (*Collapsible App Permissions*):** Kartu izin aplikasi yang dapat dibuka/tutup dengan tombol panah chevron, menjaga tampilan antarmuka tetap bersih.
+8. **Persistensi Pengaturan:** Menyimpan port terakhir, FPS, kualitas JPEG, dan sensitivitas kursor untuk sesi berikutnya.
 
 ---
 
@@ -51,163 +75,99 @@ Proyek ini merupakan solusi *full-stack* independen tanpa ketergantungan pihak k
 
 ```
 Remote Control Desktop/
-├── README.md                   # Dokumentasi Master Sistem (File Ini)
-├── .gitignore                  # Gitignore Global (Visual Studio + Android/Gradle)
+├── README.md                   # Dokumentasi Utama Sistem (v1.2.0)
+├── .gitignore                  # Gitignore Global
 │
 ├── RemoteDesktopServer/        # [SERVER] Aplikasi Windows WPF (.NET 10.0)
 │   ├── README.md               # Dokumentasi Teknis Server
-│   ├── .gitignore              # Gitignore Khusus C# / WPF / .NET
 │   ├── RemoteDesktopServer.csproj
-│   ├── App.xaml / App.xaml.cs
-│   ├── MainWindow.xaml / .cs   # Modern Dark UI Dashboard, Sliders, & Logging
+│   ├── App.xaml / App.xaml.cs  # Desain Modern Dark Theme & Resource
+│   ├── MainWindow.xaml / .cs   # Dashboard Kontrol, Tray Handler, & Startup Manager
+│   ├── Assets/
+│   │   ├── app.ico             # Ikon Multi-Resolution Windows (16x16 s/d 256x256)
+│   │   └── app.png             # Ikon High-Res 512x512
 │   ├── Core/
-│   │   ├── IScreenCapture.cs   # Interface Capture
-│   │   ├── DxgiScreenCapture.cs# Engine DirectX 11 Desktop Duplication
-│   │   ├── GdiScreenCapture.cs # Fallback Engine GDI BitBlt
-│   │   ├── ScreenCaptureManager.cs # Manajer Switch Engine Otomatis
-│   │   ├── InputSimulator.cs   # P/Invoke Win32 SendInput (Mouse, Keyboard, Unicode)
-│   │   └── NativeMethods.cs    # Win32 Native Structs & APIs
+│   │   ├── AppSettings.cs      # Persistensi Konfigurasi Lokal (settings.json)
+│   │   ├── StartupManager.cs   # Pengelola Windows Registry Run Key
+│   │   ├── TrayIconManager.cs  # Native Win32 Shell_NotifyIcon & Context Menu
+│   │   ├── IScreenCapture.cs   # Interface Screen Capture
+│   │   ├── DxgiScreenCapture.cs# Engine DirectX 11 GPU Capture (Vortice)
+│   │   ├── GdiScreenCapture.cs # Fallback Engine Win32 GDI BitBlt
+│   │   ├── ScreenCaptureManager.cs # Switcher & Auto-Recovery Capture Engine
+│   │   ├── InputSimulator.cs   # Win32 SendInput (Mouse, Keyboard, Unicode)
+│   │   └── NativeMethods.cs    # Win32 P/Invoke Declarations & Structs
 │   └── Network/
-│       ├── Protocol.cs         # Serialisasi Pesan JSON Client & Server
+│       ├── Protocol.cs         # JSON Serialization Model
 │       ├── RemoteWebSocketServer.cs # WebSocket Server & Binary Streaming Loop
-│       └── UdpDiscoveryServer.cs    # UDP Broadcast Auto-Discovery Responder
+│       └── UdpDiscoveryServer.cs    # UDP Auto-Discovery Responder (Port 9091)
 │
 └── RemoteDesktopClient/        # [CLIENT] Aplikasi Android Native (Kotlin)
-    ├── README.md               # Dokumentasi Teknis Klien
-    ├── .gitignore              # Gitignore Khusus Android / Kotlin / Gradle
+    ├── README.md               # Dokumentasi Teknis Client
     ├── build.gradle.kts
     ├── settings.gradle.kts
-    ├── app/
-    │   ├── build.gradle.kts
-    │   └── src/main/
-    │       ├── AndroidManifest.xml
-    │       └── java/com/remotedesktop/client/
-    │           ├── MainActivity.kt         # Entry point & Immersive Mode Handler
-    │           ├── data/Protocol.kt        # Data Transfer Objects & States
-    │           ├── network/
-    │           │   ├── WebSocketManager.kt # OkHttp WebSocket & Binary JPEG Receiver
-    │           │   └── LanDiscoveryManager.kt # UDP Broadcast Scanner (9091)
-    │           ├── viewmodel/RemoteViewModel.kt # State Management & Haptic Feedback
-    │           └── ui/
-    │               ├── theme/Theme.kt      # Material 3 Dark Theme
-    │               ├── components/QrScannerDialog.kt # CameraX + ML Kit QR Reader
-    │               └── screens/
-    │                   ├── ConnectionScreen.kt # Form Koneksi, Scan LAN, & QR
-    │                   └── RemoteScreen.kt    # Interactive Screen Canvas & Toolbar
+    └── app/
+        ├── build.gradle.kts    # Gradle Config (v1.2.0, Compose, CameraX)
+        └── src/main/
+            ├── AndroidManifest.xml # Permissions & Services Declaration
+            ├── res/
+            │   ├── drawable/   # Vector icons (ic_notification, ic_launcher)
+            │   └── mipmap-.../ # Android Launcher Icons (MDPI s/d XXXHDPI)
+            └── java/com/remotedesktop/client/
+                ├── MainActivity.kt         # Immersive Handler, Auto-Rotate & PiP
+                ├── data/Protocol.kt        # State Management & DTO Models
+                ├── service/
+                │   └── RemoteConnectionService.kt # 24/7 Foreground Service
+                ├── network/
+                │   ├── WebSocketManager.kt # OkHttp WebSocket & Anti-Stuck Watchdog
+                │   └── LanDiscoveryManager.kt # UDP Broadcast Scanner (9091)
+                ├── viewmodel/RemoteViewModel.kt # State Holder & Settings Persistence
+                └── ui/
+                    ├── theme/Theme.kt      # Material Design 3 Dark Theme
+                    ├── components/
+                    │   ├── PermissionCenter.kt # Collapsible Permissions Card
+                    │   └── QrScannerDialog.kt  # CameraX + ML Kit QR Reader
+                    └── screens/
+                        ├── ConnectionScreen.kt # Form Koneksi, Scan LAN & QR
+                        └── RemoteScreen.kt    # Canvas Stream, PiP, & Direct Typing
 ```
 
 ---
 
 ## 🛠️ Panduan Mulai Cepat (Quick Start)
 
-### Langkah 1: Jalankan Server di PC Windows
-1. Pastikan PC terhubung ke jaringan Wi-Fi atau kabel LAN.
-2. Buka terminal PowerShell di folder server:
+### 1. Menjalankan Server di PC Windows
+1. Buka folder `RemoteDesktopServer` di terminal:
    ```powershell
    cd "RemoteDesktopServer"
    dotnet run
    ```
-3. Atau jalankan file executable hasil publish (`RemoteDesktopServer.exe`).
-4. Server akan otomatis aktif dan menampilkan IP lokal dan QR Code.
+2. Atau jalankan file executable `RemoteDesktopServer.exe`.
+3. Server akan otomatis aktif dan menampilkan alamat IP lokal serta QR Code.
+4. *(Opsional)* Aktifkan switch **"Launch on Startup"** agar server otomatis aktif di system tray setiap kali PC menyala.
 
-> 💡 **Rekomendasi:** Jalankan server sebagai **Administrator** (*Run as Administrator*) agar server memiliki izin mengendalikan aplikasi ber-hak akses tinggi (seperti Task Manager, dialog UAC, dan game fullscreen).
-
----
-
-### Langkah 2: Jalankan Klien di Smartphone Android
-1. Pastikan HP Android terhubung ke jaringan Wi-Fi yang **sama** dengan PC.
-2. Buka proyek `RemoteDesktopClient` di **Android Studio**, lalu jalankan di HP Android Anda (atau pasang file APK `app-debug.apk`).
-3. Pilih salah satu cara koneksi instan:
-   - **Opsi A (Scan QR):** Tekan tombol **Scan QR** di HP, lalu arahkan kamera ke QR Code di layar PC.
-   - **Opsi B (Scan LAN):** Tekan **Scan LAN**, tunggu daftar PC muncul, lalu tekan **Connect**.
-   - **Opsi C (Manual):** Masukkan IP PC dan Port (`9090`), lalu tekan **Connect Now**.
-4. Layar PC Windows akan langsung tampil di smartphone Android dalam mode layar penuh *immersive*!
+### 2. Menjalankan Client di Smartphone Android
+1. Buka proyek `RemoteDesktopClient` di **Android Studio** atau pasang file APK `app-debug.apk`.
+2. Pastikan HP terhubung ke jaringan Wi-Fi yang sama dengan PC (atau menggunakan VPN).
+3. Hubungkan dengan salah satu metode:
+   - **Scan QR:** Tekan tombol **Scan QR** di kanan atas HP dan arahkan ke QR Code di layar PC.
+   - **Scan LAN:** Tekan tombol **Scan LAN** untuk mendeteksi PC secara otomatis, lalu tekan **Connect**.
+   - **Manual:** Masukkan IP PC dan Port `9090`, lalu tekan **Connect Now**.
+4. Layar HP akan seketika berputar ke posisi landscape dan menampilkan desktop PC Anda secara *real-time*.
 
 ---
 
-## 🌐 Panduan Koneksi Jarak Jauh (WAN / Luar Rumah)
+## 🌐 Panduan Penggunaan Jarak Jauh (Online / Luar Rumah)
 
-Jika Anda ingin mengontrol PC dari luar rumah melalui jaringan seluler (4G/5G) atau Wi-Fi publik:
+Jika Anda berada di luar rumah dan ingin mengontrol PC melalui koneksi seluler (4G/5G) atau Wi-Fi lain:
 
-### Menggunakan VPN Mesh (Tailscale / ZeroTier) — *Direkomendasikan (Paling Aman)*
-1. Pasang **Tailscale** di PC Windows dan HP Android Anda.
+### Rekomendasi: Menggunakan Mesh VPN (Tailscale) — *Paling Cepat & Aman*
+1. Pasang aplikasi **Tailscale** di PC Windows dan HP Android Anda.
 2. Login dengan akun yang sama pada kedua perangkat.
-3. Masukkan IP Tailscale PC Windows Anda (misal: `100.x.y.z`) ke dalam aplikasi Android pada kolom IP Address.
-4. Tekan **Connect Now** — koneksi akan terenkripsi secara *end-to-end* tanpa perlu *port forwarding*.
-
-### Menggunakan Tunneling (Ngrok)
-1. Di PC Windows, jalankan ngrok untuk mengekspos port 9090:
-   ```bash
-   ngrok tcp 9090
-   ```
-2. Salin host dan port yang diberikan oleh ngrok (misal: `0.tcp.ngrok.io:12345`).
-3. Masukkan host dan port tersebut ke aplikasi Android.
-
----
-
-## 📡 Spesifikasi Protokol Data
-
-### 1. UDP Auto-Discovery (Port 9091)
-- **Request (Android -> Broadcast `255.255.255.255:9091`):**
-  ```text
-  DISCOVER_REMOTE_SERVER
-  ```
-- **Response (Server -> Android):**
-  ```json
-  {
-    "type": "REMOTE_SERVER_INFO",
-    "serverName": "DESKTOP-WIN11",
-    "port": 9090
-  }
-  ```
-
-### 2. Binary Frame Stream Header (Server -> Klien)
-| Offset | Tipe Data | Keterangan |
-| :--- | :--- | :--- |
-| `0` | `byte` | Magic Byte `0x53` ('S') untuk menandai Screen Frame |
-| `1 .. 4` | `UInt32` (BE) | Frame Index urutan gambar |
-| `5 .. 6` | `UInt16` (BE) | Lebar frame layar (Width) |
-| `7 .. 8` | `UInt16` (BE) | Tinggi frame layar (Height) |
-| `9 .. End` | `byte[]` | Raw Binary Payload Gambar JPEG |
-
-### 3. JSON Input Commands (Klien -> Server)
-- **Gerakan Mouse Delta (Trackpad):**
-  ```json
-  { "type": "mouse_move_delta", "dx": 15, "dy": -10 }
-  ```
-- **Klik Mouse:**
-  ```json
-  { "type": "mouse_click", "button": "left", "action": "click" }
-  ```
-- **Scroll Mouse Wheel:**
-  ```json
-  { "type": "mouse_scroll", "dy": 120, "dx": 0 }
-  ```
-- **Ketik Teks Langsung (Unicode):**
-  ```json
-  { "type": "text_input", "text": "Hello World! 🚀" }
-  ```
-- **Pintasan Windows:**
-  ```json
-  { "type": "shortcut", "name": "win_d" }
-  ```
-
----
-
-## 🔧 Troubleshooting & Tips Performa
-
-1. **Layar Hitam atau Tidak Tampil:**
-   - Server memiliki fallback otomatis dari DirectX DXGI ke GDI BitBlt. Jika layar tetap tidak tampil, pastikan resolusi monitor PC Anda tidak melebihi batas kartu grafis.
-2. **Koneksi Ditolak / Timeout:**
-   - Periksa apakah firewall Windows memblokir port `9090` (TCP) dan `9091` (UDP).
-   - Pastikan opsi *AP Isolation* pada router Wi-Fi Anda dalam keadaan nonaktif.
-3. **Mengoptimalkan Latensi (Zero-Lag):**
-   - Gunakan pita frekuensi **Wi-Fi 5 GHz** untuk transmisi nirkabel yang stabil.
-   - Di antarmuka Server, atur slider kualitas JPEG ke **60–75%** untuk keseimbangan optimal antara ketajaman teks dan bandwidth.
-   - Atur FPS ke **30 atau 60 FPS** sesuai performa perangkat smartphone Anda.
+3. Masukkan alamat IP Tailscale PC Anda (misal: `100.x.y.z`) ke aplikasi Android pada kolom Server IP Address.
+4. Tekan **Connect Now** — Anda terhubung secara aman dan terenkripsi dari mana saja tanpa perlu konfigurasi router (*Zero Port Forwarding*).
 
 ---
 
 ## 📄 Lisensi
 
-Proyek ini dilisensikan di bawah [MIT License](LICENSE). Bebas digunakan dan dimodifikasi untuk keperluan pribadi maupun pengembangan lebih lanjut.
+Proyek ini dilisensikan di bawah lisensi [MIT License](LICENSE). Bebas digunakan dan dikembangkan untuk kebutuhan pribadi maupun komersial.

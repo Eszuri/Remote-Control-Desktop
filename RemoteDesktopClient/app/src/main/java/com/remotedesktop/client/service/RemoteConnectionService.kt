@@ -15,6 +15,7 @@ import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.remotedesktop.client.MainActivity
+import com.remotedesktop.client.R
 
 class RemoteConnectionService : Service {
 
@@ -164,7 +165,7 @@ class RemoteConnectionService : Service {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("⚡ PC Remote Desktop Terhubung")
             .setContentText("Aktif di background • $serverInfo")
-            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+            .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setContentIntent(pendingIntent)

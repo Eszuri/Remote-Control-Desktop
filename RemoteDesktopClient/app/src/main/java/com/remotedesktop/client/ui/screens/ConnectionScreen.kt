@@ -470,5 +470,13 @@ fun ConnectionScreen(
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "PC Remote Control Client v1.2.0",
+            color = TextSecondary,
+            fontSize = 11.sp,
+            modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp)
+        )
     }
 }

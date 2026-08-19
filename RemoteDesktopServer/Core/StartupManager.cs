@@ -40,7 +40,7 @@ namespace RemoteDesktopServer.Core
 
                     if (!string.IsNullOrEmpty(exePath))
                     {
-                        key.SetValue(AppName, $"\"{exePath}\"");
+                        key.SetValue(AppName, $"\"{exePath}\" --minimized");
                         return true;
                     }
                     return false;

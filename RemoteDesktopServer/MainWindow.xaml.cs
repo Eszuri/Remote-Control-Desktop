@@ -21,11 +21,13 @@ namespace RemoteDesktopServer
         private RemoteWebSocketServer? _server;
         private UdpDiscoveryServer? _discoveryServer;
         private DispatcherTimer? _copyFeedbackTimer;
+        private TrayIconManager? _trayManager;
         private ServerUiState _uiState = ServerUiState.Stopped;
         private int _activePort = 9090;
         private bool _isRunning;
         private bool _isClosing;
         private bool _isCompactLayout;
+        private bool _forceExit = false;
 
         private enum ServerUiState
         {
@@ -45,6 +47,12 @@ namespace RemoteDesktopServer
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            _trayManager = new TrayIconManager(this);
+            _trayManager.Initialize();
+            _trayManager.OnOpenRequested += RestoreFromTray;
+            _trayManager.OnToggleServerRequested += () => DispatchUi(() => BtnToggleServer_Click(this, new RoutedEventArgs()));
+            _trayManager.OnExitRequested += () => DispatchUi(ExitApplication);
+
             var settings = AppSettings.Load();
             TxtPort.Text = settings.Port.ToString();
             SliderFps.Value = settings.Fps;
@@ -63,13 +71,31 @@ namespace RemoteDesktopServer
             UpdateQrCode();
             ApplyCompactLayout();
             StartServer();
+
+            bool startMinimized = Environment.GetCommandLineArgs().Any(a =>
+                a.Equals("--minimized", StringComparison.OrdinalIgnoreCase) ||
+                a.Equals("-minimized", StringComparison.OrdinalIgnoreCase) ||
+                a.Equals("--silent", StringComparison.OrdinalIgnoreCase));
+
+            if (startMinimized)
+            {
+                MinimizeToTray();
+            }
         }
 
         private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
+            if (!_forceExit)
+            {
+                e.Cancel = true;
+                MinimizeToTray();
+                return;
+            }
+
             _isClosing = true;
             SaveCurrentSettings();
             StopServer();
+            _trayManager?.Dispose();
         }
 
         private void ApplyServerState(ServerUiState state, string? message = null, int? port = null)
@@ -131,6 +157,8 @@ namespace RemoteDesktopServer
                     TxtPort.IsEnabled = true;
                     break;
             }
+
+            _trayManager?.UpdateTooltip($"PC Remote Server - {state} (ws://{TxtIpAddress?.Text ?? "127.0.0.1"}:{port ?? _activePort})");
         }
 
         private Brush GetBrush(string key)
@@ -168,16 +196,16 @@ namespace RemoteDesktopServer
             }
             else
             {
-                MainContentGrid.ColumnDefinitions[0].Width = new GridLength(2, GridUnitType.Star);
-                MainContentGrid.ColumnDefinitions[1].Width = new GridLength(3, GridUnitType.Star);
+                MainContentGrid.ColumnDefinitions[0].Width = new GridLength(380, GridUnitType.Pixel);
+                MainContentGrid.ColumnDefinitions[1].Width = new GridLength(1, GridUnitType.Star);
                 MainContentGrid.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
                 MainContentGrid.RowDefinitions[1].Height = new GridLength(0);
                 Grid.SetRow(ConnectionPanel, 0);
                 Grid.SetColumn(ConnectionPanel, 0);
                 Grid.SetRow(ActivityPanel, 0);
                 Grid.SetColumn(ActivityPanel, 1);
-                ConnectionPanel.Margin = new Thickness(0, 0, 9, 0);
-                ActivityPanel.Margin = new Thickness(9, 0, 0, 0);
+                ConnectionPanel.Margin = new Thickness(0, 0, 12, 0);
+                ActivityPanel.Margin = new Thickness(0);
             }
         }
 
@@ -601,6 +629,31 @@ namespace RemoteDesktopServer
             {
                 QrModalOverlay.Visibility = Visibility.Collapsed;
             }
+        }
+
+        public void MinimizeToTray()
+        {
+            this.Hide();
+            this.ShowInTaskbar = false;
+            _trayManager?.UpdateTooltip($"PC Remote Server - {(_isRunning ? "RUNNING" : "STOPPED")} (ws://{TxtIpAddress.Text}:{_activePort})");
+        }
+
+        public void RestoreFromTray()
+        {
+            this.Show();
+            this.ShowInTaskbar = true;
+            if (this.WindowState == WindowState.Minimized)
+            {
+                this.WindowState = WindowState.Normal;
+            }
+            this.Activate();
+            this.Focus();
+        }
+
+        public void ExitApplication()
+        {
+            _forceExit = true;
+            this.Close();
         }
     }
 }
