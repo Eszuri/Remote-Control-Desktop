@@ -1,0 +1,157 @@
+name: Build and Publish Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v1.2.0)'
+        required: true
+        default: 'v1.2.0'
+      release_title:
+        description: 'Release Title'
+        required: false
+        default: 'PC Remote Control Desktop v1.2.0'
+
+permissions:
+  contents: write
+
+jobs:
+  # ============================================================================
+  # 1. BUILD WINDOWS SERVER (.NET 10 WPF)
+  # ============================================================================
+  build-server:
+    name: Build Windows Server
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore Dependencies
+        run: dotnet restore RemoteDesktopServer/RemoteDesktopServer.csproj
+
+      - name: Build & Publish Single-File Executable
+        run: |
+          dotnet publish RemoteDesktopServer/RemoteDesktopServer.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            /p:PublishSingleFile=true `
+            /p:IncludeNativeLibrariesForSelfExtract=true `
+            /p:EnableCompressionInSingleFile=true `
+            -o ./server-dist
+
+      - name: Copy Assets & Package Server ZIP
+        shell: pwsh
+        run: |
+          # Copy standalone exe as separate binary
+          Copy-Item ./server-dist/RemoteDesktopServer.exe ./RemoteDesktopServer-Windows-x64.exe
+          
+          # Compress folder to ZIP
+          Compress-Archive -Path ./server-dist/* -DestinationPath ./RemoteDesktopServer-Windows-x64.zip
+
+      - name: Upload Windows Server Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-server
+          path: |
+            RemoteDesktopServer-Windows-x64.zip
+            RemoteDesktopServer-Windows-x64.exe
+          retention-days: 7
+
+  # ============================================================================
+  # 2. BUILD ANDROID CLIENT APK (Kotlin / Jetpack Compose)
+  # ============================================================================
+  build-client:
+    name: Build Android Client APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java (JDK 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle Cache
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Grant Execute Permission to Gradle Wrapper
+        run: chmod +x ./RemoteDesktopClient/gradlew
+
+      - name: Build Android APK
+        working-directory: ./RemoteDesktopClient
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Prepare APK Output
+        run: |
+          cp ./RemoteDesktopClient/app/build/outputs/apk/debug/app-debug.apk ./RemoteDesktopClient-Android.apk
+
+      - name: Upload Android Client Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-client
+          path: RemoteDesktopClient-Android.apk
+          retention-days: 7
+
+  # ============================================================================
+  # 3. CREATE GITHUB RELEASE AND PUBLISH ALL ASSETS
+  # ============================================================================
+  publish-release:
+    name: Create & Publish GitHub Release
+    needs: [build-server, build-client]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Download Windows Server Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-server
+          path: ./release-assets
+
+      - name: Download Android Client Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-client
+          path: ./release-assets
+
+      - name: Determine Release Tag & Title
+        id: release_info
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+            echo "RELEASE_NAME=${{ github.event.inputs.release_title }}" >> $GITHUB_OUTPUT
+          else
+            TAG=${GITHUB_REF#refs/tags/}
+            echo "TAG_NAME=${TAG}" >> $GITHUB_OUTPUT
+            echo "RELEASE_NAME=PC Remote Control Desktop ${TAG}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_info.outputs.TAG_NAME }}
+          name: ${{ steps.release_info.outputs.RELEASE_NAME }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            ./release-assets/RemoteDesktopServer-Windows-x64.zip
+            ./release-assets/RemoteDesktopServer-Windows-x64.exe
+            ./release-assets/RemoteDesktopClient-Android.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
